@@ -21,6 +21,18 @@ Agent Skills are folders of instructions, scripts, and resources that agents can
 pnpm add agent-skills-ts-sdk
 ```
 
+## Playground
+
+This repo includes a small React + Cloudflare Worker playground for trying the
+SDK against editable `SKILL.md` content.
+
+```bash
+pnpm playground:dev
+```
+
+The playground shows live parsing, validation, prompt metadata, token estimates,
+patch generation, and Worker-side validation using the same SDK entry points.
+
 ## Usage
 
 ### Parsing SKILL.md

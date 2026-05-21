@@ -1,6 +1,14 @@
 import { defineConfig } from "vite-plus";
 
-const ignoredGeneratedFiles = ["dist/**", "node_modules/**", "coverage/**"];
+const ignoredGeneratedFiles = [
+  "dist/**",
+  "node_modules/**",
+  "coverage/**",
+  "playground/.wrangler/**",
+  "playground/dist/**",
+  "playground/node_modules/**",
+  "playground/worker-configuration.d.ts",
+];
 
 export default defineConfig({
   staged: {

@@ -52,6 +52,9 @@
   "scripts": {
     "build": "vp pack",
     "dev": "vp pack --watch",
+    "playground:build": "pnpm --dir playground build",
+    "playground:dev": "pnpm --dir playground dev",
+    "playground:preview": "pnpm --dir playground preview",
     "test": "vp test",
     "test:run": "vp test run",
     "check": "vp check",

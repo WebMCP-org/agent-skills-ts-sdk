@@ -1,5 +1,9 @@
 node_modules
 dist
+playground/.wrangler/
+playground/dist/
+playground/node_modules/
+playground/worker-configuration.d.ts
 *.log
 *.tgz
 .DS_Store
