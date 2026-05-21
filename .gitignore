@@ -5,8 +5,4 @@ dist
 .DS_Store
 .agents/
 .fallow/
-.playwright-mcp/
-.wrangler/
 .vitest-attachments/
-worker-configuration.d.ts
-tests/browser/__screenshots__/

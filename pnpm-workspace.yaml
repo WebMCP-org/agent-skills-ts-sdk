@@ -4,6 +4,7 @@ packages:
 allowBuilds:
   esbuild: true
   fallow: true
+  opensrc: false
   sharp: true
 
 catalog:
