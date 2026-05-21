@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "crafting-effective-readmes": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": "~/.agents/skills/crafting-effective-readmes/SKILL.md",
+      "computedHash": "638b271fdc148249ed8896dbdcf15f9067a8d64ba7d2d82ec3e86f8d82831b51"
+    },
     "grill-me": {
       "source": "mattpocock/skills",
       "sourceType": "github",
@@ -48,6 +54,12 @@
       "sourceType": "github",
       "skillPath": "skills/productivity/write-a-skill/SKILL.md",
       "computedHash": "b44d8aab2ead83c716e01af4c9a24ccc4575ce70ad58ec4f1749fb88c9cc82ba"
+    },
+    "writing": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": "~/.agents/skills/writing/SKILL.md",
+      "computedHash": "432e3be49cf97113f103e27d9b90ce59eb63312d6c90a1fc0f12eef39294b21c"
     },
     "zoom-out": {
       "source": "mattpocock/skills",

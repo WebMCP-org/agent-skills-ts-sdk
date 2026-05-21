@@ -17,6 +17,8 @@ Docs are local at `node_modules/vite-plus/docs` or online at https://viteplus.de
 ## Project-Specific Agent Setup
 
 - Use Vercel Labs `opensrc` for Agent Skills specification/reference source: see `docs/agents/opensrc.md`.
+- Use `crafting-effective-readmes` before creating, restructuring, or materially updating README files: see `docs/agents/readme-writing.md`.
+- Use `writing` for public-facing prose such as README sections, API docs, release notes, and support/security copy: see `docs/agents/readme-writing.md`.
 - Use Miguel's `maintainable-typescript` skill before implementation or review when available: see `docs/agents/maintainable-typescript.md`.
 - Read `docs/reference/README.md` before changing parser, validator, prompt, disclosure, or conformance behavior.
 - Keep the published package shape compatible with `agent-skills-ts-sdk` consumers: `dist/index.js` and `dist/index.d.ts`.
