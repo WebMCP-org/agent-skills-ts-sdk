@@ -612,13 +612,25 @@ class BrowserSkillAgent extends AbstractAgent {
   run(_input: RunAgentInput): Observable<BaseEvent> {
     return new Observable<BaseEvent>((observer) => {
       const snapshot = this.getSnapshot();
-      const messageId = `assistant_${Date.now()}`;
-      const toolCallId = `skill_${Date.now()}`;
-      const args = JSON.stringify({
+      const now = Date.now();
+      const messageId = `assistant_${now}`;
+      const readSkillToolCallId = `read_skill_${now}`;
+      const validateSkillToolCallId = `validate_skill_${now}`;
+      const discloseWorkflowToolCallId = `disclose_workflow_${now}`;
+      const readSkillArgs = JSON.stringify({
         location: "playground/SKILL.md",
         name: snapshot.name,
       });
-      const toolResult = JSON.stringify(
+      const readSkillResult = JSON.stringify({
+        allowedTools: snapshot.allowedTools || null,
+        name: snapshot.name,
+        tokens: snapshot.tokens,
+      });
+      const validateSkillArgs = JSON.stringify({
+        checks: ["frontmatter", "description", "body", "token-estimate"],
+        name: snapshot.name,
+      });
+      const validateSkillResult = JSON.stringify(
         snapshot.parseError || snapshot.validationErrors.length > 0
           ? {
               errors: [snapshot.parseError, ...snapshot.validationErrors].filter(Boolean),
@@ -632,33 +644,82 @@ class BrowserSkillAgent extends AbstractAgent {
               tokens: snapshot.tokens,
             },
       );
+      const discloseWorkflowArgs = JSON.stringify({
+        mode: "progressive_disclosure",
+        name: snapshot.name,
+      });
+      const discloseWorkflowResult = JSON.stringify({
+        steps: [
+          "load only the skill metadata",
+          "validate before relying on the instructions",
+          "open the workflow details when the task matches",
+          "apply the skill to the user request",
+        ],
+      });
+      const allowedToolsLabel = snapshot.allowedTools.replaceAll("*", "all") || "none";
       const response = [
         snapshot.parseError || snapshot.validationErrors.length > 0
           ? `The current skill is not ready to use.`
           : `I loaded \`${snapshot.name}\` and would activate it for this task.`,
         "",
-        `Allowed tools: \`${snapshot.allowedTools || "none"}\`.`,
+        `Allowed tools: ${allowedToolsLabel}.`,
         `Token estimate: ${snapshot.tokens}.`,
       ].join("\n");
 
       const events: BaseEvent[] = [
         { type: EventType.RUN_STARTED },
         {
-          delta: "Reading the current skill.",
+          delta: "I’ll inspect the skill metadata first.",
           messageId,
           type: EventType.TEXT_MESSAGE_CHUNK,
         },
         {
-          delta: args,
+          delta: readSkillArgs,
           parentMessageId: messageId,
-          toolCallId,
+          toolCallId: readSkillToolCallId,
           toolCallName: "read_skill",
           type: EventType.TOOL_CALL_CHUNK,
         },
         {
-          content: toolResult,
-          messageId: `${messageId}_tool_result`,
-          toolCallId,
+          content: readSkillResult,
+          messageId: `${messageId}_read_skill_result`,
+          toolCallId: readSkillToolCallId,
+          type: EventType.TOOL_CALL_RESULT,
+        },
+        {
+          delta: "\n\nNow I’ll validate it before using the instructions.",
+          messageId,
+          type: EventType.TEXT_MESSAGE_CHUNK,
+        },
+        {
+          delta: validateSkillArgs,
+          parentMessageId: messageId,
+          toolCallId: validateSkillToolCallId,
+          toolCallName: "validate_skill",
+          type: EventType.TOOL_CALL_CHUNK,
+        },
+        {
+          content: validateSkillResult,
+          messageId: `${messageId}_validate_skill_result`,
+          toolCallId: validateSkillToolCallId,
+          type: EventType.TOOL_CALL_RESULT,
+        },
+        {
+          delta: "\n\nThe task matches, so I’ll disclose the workflow.",
+          messageId,
+          type: EventType.TEXT_MESSAGE_CHUNK,
+        },
+        {
+          delta: discloseWorkflowArgs,
+          parentMessageId: messageId,
+          toolCallId: discloseWorkflowToolCallId,
+          toolCallName: "disclose_skill_workflow",
+          type: EventType.TOOL_CALL_CHUNK,
+        },
+        {
+          content: discloseWorkflowResult,
+          messageId: `${messageId}_disclose_workflow_result`,
+          toolCallId: discloseWorkflowToolCallId,
           type: EventType.TOOL_CALL_RESULT,
         },
         {
@@ -678,7 +739,7 @@ class BrowserSkillAgent extends AbstractAgent {
         }
         observer.next(event);
         index += 1;
-        window.setTimeout(emitNext, index < 4 ? 120 : 24);
+        window.setTimeout(emitNext, index < events.length - 1 ? 180 : 24);
       };
 
       emitNext();
