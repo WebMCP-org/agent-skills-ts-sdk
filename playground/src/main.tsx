@@ -269,12 +269,12 @@ function App() {
           aria-label="CopilotKit mock agent"
         >
           <div
-            className="grid min-h-0 flex-1 content-end gap-5 overflow-auto px-4 py-5 sm:px-5"
+            className="grid min-h-0 min-w-0 flex-1 content-end gap-5 overflow-auto px-4 py-5 sm:px-5"
             aria-label="Mock CopilotKit chat transcript"
           >
             {mockMessages.map((message) => (
               <div className={mockMessageClass(message.role)} key={message.id}>
-                <div className="flex w-fit min-w-0 max-w-full flex-col gap-2 overflow-hidden text-sm leading-6 group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:bg-secondary group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_pre]:overflow-auto [&_pre]:rounded-md [&_pre]:bg-muted/70 [&_pre]:p-3 [&_ul]:ml-5 [&_ul]:list-disc">
+                <div className="flex w-full min-w-0 max-w-full flex-col gap-2 overflow-hidden break-words text-sm leading-6 [overflow-wrap:anywhere] group-[.is-user]:ml-auto group-[.is-user]:w-fit group-[.is-user]:rounded-lg group-[.is-user]:bg-secondary group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground [&_*]:min-w-0 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:break-words [&_pre]:max-w-full [&_pre]:overflow-auto [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_pre]:rounded-md [&_pre]:bg-muted/70 [&_pre]:p-3 [&_pre_code]:!whitespace-pre-wrap [&_pre_div]:!max-w-full [&_pre_div]:!whitespace-pre-wrap [&_pre_div]:!break-words [&_ul]:ml-5 [&_ul]:list-disc">
                   <Markdown content={message.content} />
                 </div>
               </div>
@@ -618,7 +618,7 @@ function previewButtonClass(active: boolean): string {
 }
 
 function mockMessageClass(role: MockChatMessage["role"]): string {
-  const base = "group flex w-full max-w-[95%] flex-col gap-2";
+  const base = "group flex w-full min-w-0 max-w-full flex-col gap-2";
   if (role === "user") return `${base} is-user ml-auto justify-end`;
   return `${base} is-assistant`;
 }
