@@ -48,7 +48,7 @@ type SavedSkill = {
   updatedAt: number;
 };
 
-type ViewMode = "editor" | "raw" | "rich";
+type ViewMode = "reader" | "raw" | "edit";
 
 type SkillAgentSnapshot = {
   name: string;
@@ -90,17 +90,19 @@ Use this skill when you need to inspect, validate, or refine a SKILL.md file.
 
 function App() {
   const [formData, setFormData] = useState(defaultSkill);
-  const [savedContent, setSavedContent] = useState(() => assembleSkillContent(defaultSkill));
+  const [savedSkill, setSavedSkill] = useState(() =>
+    createSavedSkillRecord(assembleSkillContent(defaultSkill), defaultSkill),
+  );
   const [storageMessage, setStorageMessage] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>("editor");
+  const [viewMode, setViewMode] = useState<ViewMode>("reader");
   const [copied, setCopied] = useState<"content" | null>(null);
 
   const content = useMemo(() => assembleSkillContent(formData), [formData]);
-  const parsed = useMemo(() => parseContent(content), [content]);
-  const validationErrors = useMemo(() => validateSkillContent(content), [content]);
-  const tokenEstimate = useMemo(() => estimateTokens(content), [content]);
+  const savedContent = savedSkill.content;
+  const savedParsed = useMemo(() => parseContent(savedContent), [savedContent]);
+  const savedValidationErrors = useMemo(() => validateSkillContent(savedContent), [savedContent]);
   const hasChanges = content !== savedContent;
-  const isValid = parsed.ok && validationErrors.length === 0;
+  const isValid = savedParsed.ok && savedValidationErrors.length === 0;
   const skillAgent = useMemo(
     () => new BrowserSkillAgent(() => ({ name: formData.name })),
     [formData.name],
@@ -111,10 +113,15 @@ function App() {
 
     const seedDefaultSkill = async () => {
       const existing = await getSavedSkill(defaultSkill.name);
-      if (!existing && !cancelled) {
-        await putSavedSkill(
-          createSavedSkillRecord(assembleSkillContent(defaultSkill), defaultSkill),
-        );
+      if (cancelled) return;
+
+      if (existing) {
+        setSavedSkill(existing);
+        setFormData(createFormDataFromContent(existing.content, defaultSkill));
+      } else {
+        const record = createSavedSkillRecord(assembleSkillContent(defaultSkill), defaultSkill);
+        await putSavedSkill(record);
+        if (!cancelled) setSavedSkill(record);
       }
     };
 
@@ -126,23 +133,23 @@ function App() {
   }, []);
 
   const resetSkill = useCallback(() => {
-    setFormData(defaultSkill);
-    setSavedContent(assembleSkillContent(defaultSkill));
+    setFormData(createFormDataFromContent(savedContent, defaultSkill));
     setStorageMessage(null);
-  }, []);
+  }, [savedContent]);
 
   const saveSnapshot = useCallback(async () => {
     const record = createSavedSkillRecord(content, formData);
     await putSavedSkill(record);
-    setSavedContent(content);
+    setSavedSkill(record);
     setStorageMessage("Saved");
+    setViewMode("reader");
   }, [content, formData]);
 
   const copySkill = useCallback(async () => {
-    await navigator.clipboard.writeText(content);
+    await navigator.clipboard.writeText(savedContent);
     setCopied("content");
     window.setTimeout(() => setCopied(null), 1200);
-  }, [content]);
+  }, [savedContent]);
 
   return (
     <main className="flex h-dvh min-h-dvh flex-col overflow-hidden bg-background text-foreground">
@@ -152,13 +159,13 @@ function App() {
             <p className="font-mono text-xs font-semibold text-muted-foreground">
               agent-skills-ts-sdk
             </p>
-            <h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl">Skill Editor</h1>
+            <h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl">Skill Reader</h1>
           </div>
           <div className="hidden min-w-0 items-center gap-2 lg:flex" aria-label="Current status">
             <StatusPill tone={isValid ? "success" : "error"}>
               {isValid ? "Valid" : "Needs Work"}
             </StatusPill>
-            <StatusPill tone="neutral">{tokenEstimate} tokens</StatusPill>
+            <StatusPill tone="neutral">{savedSkill.tokens} tokens</StatusPill>
             <StatusPill tone={hasChanges ? "warn" : "neutral"}>
               {hasChanges ? "Unsaved" : "Saved"}
             </StatusPill>
@@ -195,11 +202,12 @@ function App() {
         <div className="border-t px-4 py-2 sm:px-6">
           <div className="inline-flex rounded-md border bg-muted p-1" aria-label="Skill view">
             <button
-              className={previewButtonClass(viewMode === "editor")}
+              className={previewButtonClass(viewMode === "reader")}
               type="button"
-              onClick={() => setViewMode("editor")}
+              onClick={() => setViewMode("reader")}
             >
-              Editor
+              <Eye size={15} />
+              Skill
             </button>
             <button
               className={previewButtonClass(viewMode === "raw")}
@@ -210,12 +218,11 @@ function App() {
               Raw
             </button>
             <button
-              className={previewButtonClass(viewMode === "rich")}
+              className={previewButtonClass(viewMode === "edit")}
               type="button"
-              onClick={() => setViewMode("rich")}
+              onClick={() => setViewMode("edit")}
             >
-              <Eye size={15} />
-              Rich
+              Edit
             </button>
           </div>
         </div>
@@ -227,7 +234,21 @@ function App() {
       >
         <section className="flex min-h-0 min-w-0 flex-col" aria-label="Skill workspace">
           <div className="min-h-0 flex-1 overflow-auto px-4 py-6 sm:px-6 lg:px-8">
-            {viewMode === "editor" ? (
+            {viewMode === "reader" ? (
+              <div className="mx-auto max-w-4xl">
+                <SkillReader
+                  parsed={savedParsed}
+                  savedSkill={savedSkill}
+                  validationErrors={savedValidationErrors}
+                />
+              </div>
+            ) : viewMode === "raw" ? (
+              <div className="mx-auto max-w-4xl space-y-4">
+                <pre className="min-h-[70vh] overflow-auto rounded-md bg-muted/50 p-4 text-xs leading-5 text-foreground">
+                  {savedContent}
+                </pre>
+              </div>
+            ) : (
               <div className="mx-auto max-w-3xl">
                 <SkillForm
                   value={formData}
@@ -238,16 +259,6 @@ function App() {
                   }}
                   onSubmit={() => void saveSnapshot()}
                 />
-              </div>
-            ) : viewMode === "raw" ? (
-              <div className="mx-auto max-w-4xl space-y-4">
-                <pre className="min-h-[70vh] overflow-auto rounded-md bg-muted/50 p-4 text-xs leading-5 text-foreground">
-                  {content}
-                </pre>
-              </div>
-            ) : (
-              <div className="mx-auto max-w-4xl">
-                <SkillVisual parsed={parsed} validationErrors={validationErrors} />
               </div>
             )}
           </div>
@@ -797,11 +808,13 @@ class BrowserSkillAgent extends AbstractAgent {
   }
 }
 
-function SkillVisual({
+function SkillReader({
   parsed,
+  savedSkill,
   validationErrors,
 }: {
   parsed: ReturnType<typeof parseContent>;
+  savedSkill: SavedSkill;
   validationErrors: string[];
 }) {
   if (!parsed.ok) {
@@ -816,24 +829,36 @@ function SkillVisual({
   const properties = parsed.properties;
 
   return (
-    <div className="grid max-h-[420px] gap-4 overflow-auto rounded-md border bg-background p-4">
-      <div className="grid gap-x-4 gap-y-2 rounded-md border bg-card p-3 text-sm sm:grid-cols-[120px_minmax(0,1fr)]">
-        <span className="font-medium text-muted-foreground">Name</span>
-        <strong className="min-w-0">{properties.name}</strong>
-        <span className="font-medium text-muted-foreground">Description</span>
-        <p className="min-w-0">{properties.description}</p>
-        {properties.compatibility ? (
-          <>
-            <span className="font-medium text-muted-foreground">Compatibility</span>
-            <p className="min-w-0">{properties.compatibility}</p>
-          </>
-        ) : null}
-        {properties.allowedTools ? (
-          <>
-            <span className="font-medium text-muted-foreground">Allowed tools</span>
-            <code className="min-w-0 rounded bg-muted px-1 py-0.5">{properties.allowedTools}</code>
-          </>
-        ) : null}
+    <div className="grid gap-6">
+      <div className="grid gap-4 border-b pb-5">
+        <div className="min-w-0">
+          <h2 className="break-words text-2xl font-semibold tracking-tight">{properties.name}</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+            {properties.description}
+          </p>
+        </div>
+        <dl className="grid gap-x-5 gap-y-2 text-sm sm:grid-cols-[120px_minmax(0,1fr)]">
+          <dt className="font-medium text-muted-foreground">Source</dt>
+          <dd>IndexedDB</dd>
+          <dt className="font-medium text-muted-foreground">Tokens</dt>
+          <dd>{savedSkill.tokens}</dd>
+          {properties.compatibility ? (
+            <>
+              <dt className="font-medium text-muted-foreground">Compatibility</dt>
+              <dd className="min-w-0">{properties.compatibility}</dd>
+            </>
+          ) : null}
+          {properties.allowedTools ? (
+            <>
+              <dt className="font-medium text-muted-foreground">Allowed tools</dt>
+              <dd>
+                <code className="min-w-0 rounded bg-muted px-1 py-0.5">
+                  {properties.allowedTools}
+                </code>
+              </dd>
+            </>
+          ) : null}
+        </dl>
       </div>
       {validationErrors.length > 0 ? (
         <ValidationList errors={validationErrors} parseError={null} />
@@ -1020,6 +1045,20 @@ function createSavedSkillRecord(content: string, fallback: SkillFormData): Saved
     name,
     tokens: estimateTokens(content),
     updatedAt: Date.now(),
+  };
+}
+
+function createFormDataFromContent(content: string, fallback: SkillFormData): SkillFormData {
+  const parsed = parseContent(content);
+  if (!parsed.ok) return fallback;
+
+  return {
+    allowedTools: parsed.properties.allowedTools ?? "",
+    body: parsed.body,
+    compatibility: parsed.properties.compatibility ?? "",
+    description: parsed.properties.description,
+    license: parsed.properties.license ?? "",
+    name: parsed.properties.name,
   };
 }
 
