@@ -1,23 +1,8 @@
-import {
-  AlertCircle,
-  ChevronDown,
-  Code2,
-  CheckCircle2,
-  Copy,
-  Database,
-  Eye,
-  Github,
-  Play,
-  RefreshCcw,
-  Save,
-  Trash2,
-  WandSparkles,
-  Wrench,
-} from "lucide-react";
+import { ChevronDown, Code2, Copy, Eye, Github, Play, RefreshCcw, Save } from "lucide-react";
 import { Markdown } from "@copilotkit/react-ui";
 // @ts-ignore Vite handles CSS side-effect imports in the playground build.
 import "@copilotkit/react-ui/styles.css";
-import { StrictMode, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { StrictMode, useCallback, useMemo, useState, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import {
   estimateTokens,
@@ -38,23 +23,6 @@ type SkillFormData = {
   name: string;
 };
 
-type ExampleSkill = {
-  content: string;
-  description: string;
-  id: string;
-  name: string;
-};
-
-type BrowserValidationResult = {
-  bodyLength?: number;
-  error?: string;
-  ok: boolean;
-  prompt?: string;
-  properties?: SkillProperties;
-  tokens?: number;
-  validationErrors: string[];
-};
-
 type SavedSkill = {
   content: string;
   description: string;
@@ -67,11 +35,10 @@ type SavedSkill = {
 type MockChatMessage = {
   content: string;
   id: string;
-  role: "assistant" | "tool" | "user";
+  role: "assistant" | "user";
 };
 
-type PreviewMode = "raw" | "visual";
-type WorkspaceMode = "editor" | "skill";
+type ViewMode = "editor" | "raw" | "rich";
 
 const buttonBaseClass =
   "inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-md px-3 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50";
@@ -92,60 +59,6 @@ declare global {
 const skillDbName = "agent-skills-ts-sdk-playground";
 const skillDbVersion = 1;
 const skillsStoreName = "skills";
-
-const sampleSkills: ExampleSkill[] = [
-  {
-    id: "readme-writer",
-    name: "readme-writer",
-    description: "Drafts README updates for TypeScript package maintainers.",
-    content: `---
-name: readme-writer
-description: Draft README sections for TypeScript package maintainers when public docs need clearer installation, usage, API, or release guidance.
-license: MIT
-compatibility: Works best in npm package repositories with package.json and TypeScript source.
-allowed-tools: Read Grep Glob
----
-# README Writer
-
-Use this skill when README changes need to explain a TypeScript package to users.
-
-## Workflow
-
-1. Read \`package.json\`, the public exports, and existing README sections.
-2. Identify the reader: evaluator, first-time user, contributor, or maintainer.
-3. Keep install and first-use examples short enough to run in one sitting.
-4. Name compatibility constraints directly.
-5. Prefer concrete examples over broad claims.
-
-## Output
-
-Return replacement-ready Markdown and call out any facts that need maintainer confirmation.
-`,
-  },
-  {
-    id: "cloudflare-worker-review",
-    name: "cloudflare-worker-review",
-    description:
-      "Reviews Cloudflare Worker code for deployable request handling and package-demo clarity.",
-    content: `---
-name: cloudflare-worker-review
-description: Review Cloudflare Worker examples for small SDK repos before publishing demos or docs.
-compatibility: Cloudflare Workers, Vite, and TypeScript.
-allowed-tools: Read Grep Bash(npm:*) Bash(pnpm:*)
----
-# Cloudflare Worker Review
-
-Check that the Worker example is easy to run and demonstrates the package without hiding important code.
-
-## Review Points
-
-- The Worker should expose a narrow, inspectable API.
-- Responses should include status codes and JSON content types.
-- The example should avoid production-only configuration.
-- The README should explain local development and deployment separately.
-`,
-  },
-];
 
 const defaultSkill: SkillFormData = {
   allowedTools: "Read Grep Bash(pnpm:*)",
@@ -170,12 +83,8 @@ Use this skill when you need to inspect, validate, or refine a SKILL.md file.
 function App() {
   const [formData, setFormData] = useState(defaultSkill);
   const [savedContent, setSavedContent] = useState(() => assembleSkillContent(defaultSkill));
-  const [examples] = useState<ExampleSkill[]>(sampleSkills);
-  const [savedSkills, setSavedSkills] = useState<SavedSkill[]>([]);
-  const [browserResult, setBrowserResult] = useState<BrowserValidationResult | null>(null);
   const [storageMessage, setStorageMessage] = useState<string | null>(null);
-  const [skillPreviewMode, setSkillPreviewMode] = useState<PreviewMode>("raw");
-  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("editor");
+  const [viewMode, setViewMode] = useState<ViewMode>("editor");
   const [mockMessages, setMockMessages] = useState<MockChatMessage[]>(() =>
     createInitialMockMessages(defaultSkill),
   );
@@ -192,35 +101,17 @@ function App() {
   const hasChanges = content !== savedContent;
   const isValid = parsed.ok && validationErrors.length === 0;
 
-  useEffect(() => {
-    void refreshSavedSkills(setSavedSkills);
-  }, []);
-
   const updateField = useCallback(
     (field: keyof SkillFormData) =>
       (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         setFormData((current) => ({ ...current, [field]: event.target.value }));
-        setBrowserResult(null);
       },
     [],
   );
 
-  const loadExample = useCallback(async (id: string) => {
-    const example = sampleSkills.find((skill) => skill.id === id);
-    if (example) {
-      const next = parseToFormData(example.content);
-      setFormData(next);
-      setSavedContent(example.content);
-      setBrowserResult(null);
-      setStorageMessage(`Loaded ${next.name} sample`);
-      setMockMessages(createInitialMockMessages(next));
-    }
-  }, []);
-
   const resetSkill = useCallback(() => {
     setFormData(defaultSkill);
     setSavedContent(assembleSkillContent(defaultSkill));
-    setBrowserResult(null);
     setStorageMessage(null);
     setMockMessages(createInitialMockMessages(defaultSkill));
   }, []);
@@ -230,37 +121,19 @@ function App() {
       bodyLength: parsed.ok ? parsed.body.length : undefined,
       error: parsed.ok ? undefined : parsed.error,
       ok: parsed.ok && validationErrors.length === 0,
-      prompt: promptPreview,
       properties: parsed.ok ? parsed.properties : undefined,
       tokens: tokenEstimate,
       validationErrors,
-    } satisfies BrowserValidationResult;
-    setBrowserResult(result);
+    };
     return result;
-  }, [parsed, promptPreview, tokenEstimate, validationErrors]);
+  }, [parsed, tokenEstimate, validationErrors]);
 
   const saveSnapshot = useCallback(async () => {
     const record = createSavedSkillRecord(content, formData);
     await putSavedSkill(record);
-    await refreshSavedSkills(setSavedSkills);
     setSavedContent(content);
-    setStorageMessage(`Saved ${record.name} to IndexedDB`);
+    setStorageMessage("Saved");
   }, [content, formData]);
-
-  const loadSavedSkill = useCallback(async (skill: SavedSkill) => {
-    const next = parseToFormData(skill.content);
-    setFormData(next);
-    setSavedContent(skill.content);
-    setBrowserResult(null);
-    setStorageMessage(`Loaded ${skill.name} from IndexedDB`);
-    setMockMessages(createInitialMockMessages(next));
-  }, []);
-
-  const deleteSavedSkill = useCallback(async (skill: SavedSkill) => {
-    await deleteSkillRecord(skill.id);
-    await refreshSavedSkills(setSavedSkills);
-    setStorageMessage(`Deleted ${skill.name} from IndexedDB`);
-  }, []);
 
   const copySkill = useCallback(async () => {
     await navigator.clipboard.writeText(content);
@@ -283,38 +156,97 @@ function App() {
 
   return (
     <main className="flex h-dvh min-h-dvh flex-col overflow-hidden bg-background text-foreground">
-      <header className="flex min-h-16 shrink-0 items-center justify-between gap-4 border-b px-4 sm:px-6">
-        <div className="min-w-0">
-          <p className="font-mono text-xs font-semibold text-muted-foreground">
-            agent-skills-ts-sdk
-          </p>
-          <h1 className="truncate text-xl font-bold tracking-tight text-balance sm:text-2xl">
-            Skill Editor
-          </h1>
+      <header className="shrink-0 border-b">
+        <div className="flex min-h-16 items-center justify-between gap-4 px-4 sm:px-6">
+          <div className="min-w-0">
+            <p className="font-mono text-xs font-semibold text-muted-foreground">
+              agent-skills-ts-sdk
+            </p>
+            <h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl">Skill Editor</h1>
+          </div>
+          <div className="hidden min-w-0 items-center gap-2 lg:flex" aria-label="Current status">
+            <StatusPill tone={isValid ? "success" : "error"}>
+              {isValid ? "Valid" : "Needs Work"}
+            </StatusPill>
+            <StatusPill tone="neutral">{tokenEstimate} tokens</StatusPill>
+            <StatusPill tone={hasChanges ? "warn" : "neutral"}>
+              {hasChanges ? "Unsaved" : "Saved"}
+            </StatusPill>
+            {storageMessage ? <StatusPill tone="neutral">{storageMessage}</StatusPill> : null}
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <a
+              className={outlineButtonClass}
+              href="https://github.com/WebMCP-org/agent-skills-ts-sdk"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <Github size={16} />
+              <span className="hidden sm:inline">GitHub</span>
+            </a>
+            <a
+              className={outlineButtonClass}
+              href="https://github.com/WebMCP-org/agent-skills-ts-sdk/blob/main/README.md"
+              rel="noreferrer"
+              target="_blank"
+            >
+              README
+            </a>
+            <button
+              aria-label="Reset skill"
+              className={outlineButtonClass}
+              type="button"
+              onClick={resetSkill}
+            >
+              <RefreshCcw size={16} />
+            </button>
+            <button className={outlineButtonClass} type="button" onClick={() => void copySkill()}>
+              <Copy size={15} />
+              <span className="hidden sm:inline">{copied === "content" ? "Copied" : "Copy"}</span>
+            </button>
+            <button
+              className={outlineButtonClass}
+              type="button"
+              onClick={() => void saveSnapshot()}
+            >
+              <Save size={16} />
+              <span className="hidden sm:inline">Save</span>
+            </button>
+            <button className={primaryButtonClass} type="button" onClick={runMockAgent}>
+              <Play size={16} />
+              Run
+            </button>
+          </div>
         </div>
-        <div className="hidden min-w-0 items-center gap-2 md:flex" aria-label="Current status">
-          <StatusPill tone={isValid ? "success" : "error"}>
-            {isValid ? "Valid" : "Needs Work"}
-          </StatusPill>
-          <StatusPill tone="neutral">{tokenEstimate} tokens</StatusPill>
-          <StatusPill tone={hasChanges ? "warn" : "neutral"}>
-            {hasChanges ? "Unsaved" : "Saved"}
-          </StatusPill>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            aria-label="Reset skill"
-            className={outlineButtonClass}
-            type="button"
-            onClick={resetSkill}
-          >
-            <RefreshCcw size={16} />
-            <span className="hidden sm:inline">Reset</span>
-          </button>
-          <button className={primaryButtonClass} type="button" onClick={() => void saveSnapshot()}>
-            <Save size={16} />
-            Save
-          </button>
+        <div className="flex items-center justify-between gap-4 border-t px-4 py-2 sm:px-6">
+          <div className="inline-flex rounded-md border bg-muted p-1" aria-label="Skill view">
+            <button
+              className={previewButtonClass(viewMode === "editor")}
+              type="button"
+              onClick={() => setViewMode("editor")}
+            >
+              Editor
+            </button>
+            <button
+              className={previewButtonClass(viewMode === "raw")}
+              type="button"
+              onClick={() => setViewMode("raw")}
+            >
+              <Code2 size={15} />
+              Raw
+            </button>
+            <button
+              className={previewButtonClass(viewMode === "rich")}
+              type="button"
+              onClick={() => setViewMode("rich")}
+            >
+              <Eye size={15} />
+              Rich
+            </button>
+          </div>
+          <code className="hidden min-w-0 truncate rounded bg-muted/50 px-2 py-1 text-xs text-muted-foreground md:block">
+            parseSkillContent · validateSkillContent · toPrompt · estimateTokens
+          </code>
         </div>
       </header>
 
@@ -323,52 +255,8 @@ function App() {
         aria-label="Skill editor and agent mock"
       >
         <section className="flex min-h-0 min-w-0 flex-col" aria-label="Skill workspace">
-          <div className="flex shrink-0 flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-            <div
-              className="inline-flex w-fit rounded-md border bg-muted p-1"
-              aria-label="Workspace mode"
-            >
-              <button
-                className={previewButtonClass(workspaceMode === "editor")}
-                type="button"
-                onClick={() => setWorkspaceMode("editor")}
-              >
-                <WandSparkles size={15} />
-                Editor
-              </button>
-              <button
-                className={previewButtonClass(workspaceMode === "skill")}
-                type="button"
-                onClick={() => setWorkspaceMode("skill")}
-              >
-                <Code2 size={15} />
-                SKILL.md
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                className={outlineButtonClass}
-                type="button"
-                onClick={() => void loadExample(examples[0].id)}
-              >
-                README skill
-              </button>
-              <button
-                className={outlineButtonClass}
-                type="button"
-                onClick={() => void loadExample(examples[1].id)}
-              >
-                Worker skill
-              </button>
-              <button className={outlineButtonClass} type="button" onClick={() => void copySkill()}>
-                <Copy size={15} />
-                {copied === "content" ? "Copied" : "Copy"}
-              </button>
-            </div>
-          </div>
-
           <div className="min-h-0 flex-1 overflow-auto px-4 py-6 sm:px-6 lg:px-8">
-            {workspaceMode === "editor" ? (
+            {viewMode === "editor" ? (
               <div className="mx-auto max-w-3xl space-y-6">
                 <Field label="Name" detail={`${formData.name.length}/64`}>
                   <input
@@ -449,142 +337,38 @@ function App() {
                   />
                 </Field>
               </div>
-            ) : (
+            ) : viewMode === "raw" ? (
               <div className="mx-auto max-w-4xl space-y-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <h2 className="text-base font-semibold">SKILL.md Content</h2>
-                  <div
-                    className="inline-flex w-fit rounded-md border bg-muted p-1"
-                    aria-label="SKILL.md preview mode"
-                  >
-                    <button
-                      className={previewButtonClass(skillPreviewMode === "raw")}
-                      type="button"
-                      onClick={() => setSkillPreviewMode("raw")}
-                    >
-                      <Code2 size={15} />
-                      Raw
-                    </button>
-                    <button
-                      className={previewButtonClass(skillPreviewMode === "visual")}
-                      type="button"
-                      onClick={() => setSkillPreviewMode("visual")}
-                    >
-                      <Eye size={15} />
-                      Visual
-                    </button>
-                  </div>
-                </div>
-                {skillPreviewMode === "raw" ? (
-                  <pre className="min-h-[64vh] overflow-auto rounded-md bg-muted/50 p-4 text-xs leading-5 text-foreground">
-                    {content}
-                  </pre>
-                ) : (
-                  <SkillVisual parsed={parsed} validationErrors={validationErrors} />
-                )}
+                <pre className="min-h-[70vh] overflow-auto rounded-md bg-muted/50 p-4 text-xs leading-5 text-foreground">
+                  {content}
+                </pre>
+              </div>
+            ) : (
+              <div className="mx-auto max-w-4xl">
+                <SkillVisual parsed={parsed} validationErrors={validationErrors} />
               </div>
             )}
           </div>
-
-          <section
-            className="flex shrink-0 items-center gap-3 overflow-x-auto border-t px-4 py-3 sm:px-6"
-            aria-label="IndexedDB storage"
-          >
-            <div className="flex shrink-0 items-center gap-2 text-sm font-medium">
-              <Database className="size-4 text-muted-foreground" />
-              IndexedDB
-            </div>
-            {storageMessage ? (
-              <p className="shrink-0 text-sm text-muted-foreground" aria-live="polite">
-                {storageMessage}
-              </p>
-            ) : null}
-            <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto">
-              {savedSkills.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No saved skills yet.</p>
-              ) : (
-                savedSkills.map((skill) => (
-                  <div className="flex shrink-0 items-center gap-1" key={skill.id}>
-                    <button
-                      className="inline-flex h-9 max-w-64 min-w-0 items-center gap-2 rounded-md border bg-background px-3 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground"
-                      type="button"
-                      onClick={() => void loadSavedSkill(skill)}
-                    >
-                      <span className="truncate font-medium">{skill.name}</span>
-                      <code className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                        {skill.tokens}
-                      </code>
-                    </button>
-                    <button
-                      aria-label={`Delete ${skill.name}`}
-                      className="inline-flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-                      type="button"
-                      onClick={() => void deleteSavedSkill(skill)}
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
         </section>
 
         <section
           className="flex min-h-0 min-w-0 flex-col border-t bg-background lg:border-l lg:border-t-0"
           aria-label="CopilotKit mock agent"
         >
-          <header className="flex min-h-16 shrink-0 items-center justify-between gap-3 border-b px-4 sm:px-5">
-            <div className="min-w-0">
-              <p className="font-mono text-xs font-semibold text-muted-foreground">
-                agent-skills-ts-sdk
-              </p>
-              <h2 className="truncate text-xl font-bold tracking-tight">Agent Context</h2>
-            </div>
-            <button className={primaryButtonClass} type="button" onClick={runMockAgent}>
-              <Play size={16} />
-              Run
-            </button>
-          </header>
-
-          <section
-            className="flex shrink-0 items-start gap-3 border-b bg-muted/30 px-4 py-3 sm:px-5"
-            aria-label="Browser validation result"
-          >
-            {isValid ? (
-              <CheckCircle2 className="mt-0.5 size-4 text-success" />
-            ) : (
-              <AlertCircle className="mt-0.5 size-4 text-destructive" />
-            )}
-            <div className="min-w-0 space-y-0.5">
-              <strong className="text-sm font-medium">
-                {isValid ? "SKILL.md valid" : "SKILL.md invalid"}
-              </strong>
-              <p className="text-sm text-muted-foreground">
-                {browserResult
-                  ? `${browserResult.tokens ?? tokenEstimate} tokens`
-                  : `${tokenEstimate} tokens`}
-              </p>
-            </div>
-          </section>
-
-          <PackageReference />
-
           <div
-            className="grid min-h-0 flex-1 content-start gap-5 overflow-auto px-4 py-5 sm:px-5"
+            className="grid min-h-0 flex-1 content-end gap-5 overflow-auto px-4 py-5 sm:px-5"
             aria-label="Mock CopilotKit chat transcript"
           >
-            {mockMessages.map((message) =>
-              message.role === "tool" ? (
-                <ToolMessage content={message.content} key={message.id} />
-              ) : (
-                <div className={mockMessageClass(message.role)} key={message.id}>
-                  <div className="flex w-fit min-w-0 max-w-full flex-col gap-2 overflow-hidden text-sm leading-6 group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:bg-secondary group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_pre]:overflow-auto [&_pre]:rounded-md [&_pre]:bg-muted/70 [&_pre]:p-3 [&_ul]:ml-5 [&_ul]:list-disc">
-                    <Markdown content={message.content} />
-                  </div>
+            {mockMessages.map((message) => (
+              <div className={mockMessageClass(message.role)} key={message.id}>
+                <div className="flex w-fit min-w-0 max-w-full flex-col gap-2 overflow-hidden text-sm leading-6 group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:bg-secondary group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_pre]:overflow-auto [&_pre]:rounded-md [&_pre]:bg-muted/70 [&_pre]:p-3 [&_ul]:ml-5 [&_ul]:list-disc">
+                  <Markdown content={message.content} />
                 </div>
-              ),
-            )}
+              </div>
+            ))}
+          </div>
+          <div className="shrink-0 border-t p-4 sm:p-5">
+            <div className="min-h-11 rounded-lg border bg-muted/30" aria-label="LLM mock input" />
           </div>
         </section>
       </section>
@@ -646,76 +430,6 @@ function mockMessageClass(role: MockChatMessage["role"]): string {
   const base = "group flex w-full max-w-[95%] flex-col gap-2";
   if (role === "user") return `${base} is-user ml-auto justify-end`;
   return `${base} is-assistant`;
-}
-
-function PackageReference() {
-  return (
-    <section className="shrink-0 border-b px-4 py-4 sm:px-5" aria-label="Package reference">
-      <div className="grid gap-4 text-sm">
-        <div className="flex flex-wrap gap-2">
-          <a
-            className={outlineButtonClass}
-            href="https://github.com/WebMCP-org/agent-skills-ts-sdk"
-            rel="noreferrer"
-            target="_blank"
-          >
-            <Github size={16} />
-            GitHub
-          </a>
-          <a
-            className={outlineButtonClass}
-            href="https://github.com/WebMCP-org/agent-skills-ts-sdk/blob/main/README.md"
-            rel="noreferrer"
-            target="_blank"
-          >
-            README
-          </a>
-        </div>
-        <div className="grid gap-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            API
-          </h3>
-          <code className="break-words rounded-md bg-muted/50 px-3 py-2 text-xs leading-5">
-            parseSkillContent · validateSkillContent · toPrompt · estimateTokens
-          </code>
-        </div>
-        <div className="grid gap-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Agent Tool
-          </h3>
-          <code className="break-words rounded-md bg-muted/50 px-3 py-2 text-xs leading-5">
-            read_skill → {"<available_skills>"}
-          </code>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function ToolMessage({ content }: { content: string }) {
-  return (
-    <div className="group not-prose mb-3 w-full rounded-xl border">
-      <div className="flex w-full items-center justify-between gap-3 p-3 text-left">
-        <div className="flex min-w-0 items-center gap-2">
-          <Wrench className="size-4 shrink-0 text-muted-foreground" />
-          <span className="truncate text-sm font-medium">read_skill</span>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-2 py-0.5 text-[11px] font-medium text-secondary-foreground">
-            <CheckCircle2 className="size-3.5 text-success" />
-            Completed
-          </span>
-        </div>
-        <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
-      </div>
-      <div className="space-y-3 border-t px-4 py-3 text-popover-foreground">
-        <h4 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          Result
-        </h4>
-        <div className="overflow-x-auto rounded-md bg-muted/50 p-3 text-xs leading-5 text-foreground [&_code]:rounded [&_code]:bg-background [&_code]:px-1 [&_pre]:overflow-auto [&_pre]:whitespace-pre-wrap [&_ul]:ml-5 [&_ul]:list-disc">
-          <Markdown content={content} />
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function SkillVisual({
@@ -831,19 +545,6 @@ function parseContent(
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
-}
-
-function parseToFormData(content: string): SkillFormData {
-  const parsed = parseSkillContent(content);
-
-  return {
-    allowedTools: parsed.properties.allowedTools ?? "",
-    body: parsed.body.trim(),
-    compatibility: parsed.properties.compatibility ?? "",
-    description: parsed.properties.description,
-    license: parsed.properties.license ?? "",
-    name: parsed.properties.name,
-  };
 }
 
 function assembleSkillContent(data: SkillFormData): string {
@@ -993,14 +694,13 @@ function createMockAgentMessages(
       role: "user",
     },
     {
-      content: [toolSummary, "", "```xml", promptPreview || "<available_skills />", "```"].join(
-        "\n",
-      ),
-      id: "tool-read-skill",
-      role: "tool",
-    },
-    {
       content: [
+        toolSummary,
+        "",
+        "```xml",
+        promptPreview || "<available_skills />",
+        "```",
+        "",
         `Activated **${skill.name}**.`,
         `Description: ${skill.description}`,
         `Allowed tools: ${skill.allowedTools || "none"}`,
@@ -1011,24 +711,6 @@ function createMockAgentMessages(
   ];
 }
 
-async function refreshSavedSkills(setSavedSkills: (skills: SavedSkill[]) => void): Promise<void> {
-  const skills = await getSavedSkills();
-  setSavedSkills(skills.sort((a, b) => b.updatedAt - a.updatedAt));
-}
-
-async function getSavedSkills(): Promise<SavedSkill[]> {
-  const db = await openSkillDb();
-
-  return new Promise((resolve, reject) => {
-    const request = db
-      .transaction(skillsStoreName, "readonly")
-      .objectStore(skillsStoreName)
-      .getAll();
-    request.onsuccess = () => resolve(request.result as SavedSkill[]);
-    request.onerror = () => reject(request.error);
-  });
-}
-
 async function putSavedSkill(skill: SavedSkill): Promise<void> {
   const db = await openSkillDb();
 
@@ -1037,19 +719,6 @@ async function putSavedSkill(skill: SavedSkill): Promise<void> {
       .transaction(skillsStoreName, "readwrite")
       .objectStore(skillsStoreName)
       .put(skill);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function deleteSkillRecord(id: string): Promise<void> {
-  const db = await openSkillDb();
-
-  return new Promise((resolve, reject) => {
-    const request = db
-      .transaction(skillsStoreName, "readwrite")
-      .objectStore(skillsStoreName)
-      .delete(id);
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);
   });
