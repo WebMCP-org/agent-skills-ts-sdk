@@ -6,6 +6,7 @@ import {
   Copy,
   Database,
   Eye,
+  Github,
   Play,
   RefreshCcw,
   Save,
@@ -379,9 +380,6 @@ function App() {
                     onChange={updateField("name")}
                     spellCheck={false}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Lowercase letters, numbers, and hyphens only
-                  </p>
                 </Field>
 
                 <Field label="Description" detail={`${formData.description.length}/1024`}>
@@ -393,9 +391,6 @@ function App() {
                     onChange={updateField("description")}
                     placeholder="Describe what this skill does and when the agent should use it…"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Explain what the skill does and when to use it
-                  </p>
                 </Field>
 
                 <details className="group border-t pt-2">
@@ -438,9 +433,6 @@ function App() {
                         onChange={updateField("allowedTools")}
                         placeholder="Bash(git:*) Read Write"
                       />
-                      <p className="text-xs text-muted-foreground">
-                        Space-separated list of pre-approved tools (advanced)
-                      </p>
                     </Field>
                   </div>
                 </details>
@@ -455,9 +447,6 @@ function App() {
                     onChange={updateField("body")}
                     spellCheck={false}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Markdown content that teaches the agent how to help
-                  </p>
                 </Field>
               </div>
             ) : (
@@ -548,9 +537,9 @@ function App() {
           <header className="flex min-h-16 shrink-0 items-center justify-between gap-3 border-b px-4 sm:px-5">
             <div className="min-w-0">
               <p className="font-mono text-xs font-semibold text-muted-foreground">
-                CopilotKit UI mock
+                agent-skills-ts-sdk
               </p>
-              <h2 className="truncate text-xl font-bold tracking-tight">Agent Run</h2>
+              <h2 className="truncate text-xl font-bold tracking-tight">Agent Context</h2>
             </div>
             <button className={primaryButtonClass} type="button" onClick={runMockAgent}>
               <Play size={16} />
@@ -569,17 +558,17 @@ function App() {
             )}
             <div className="min-w-0 space-y-0.5">
               <strong className="text-sm font-medium">
-                {isValid
-                  ? "Browser validation ready"
-                  : "Fix validation before relying on this skill"}
+                {isValid ? "SKILL.md valid" : "SKILL.md invalid"}
               </strong>
               <p className="text-sm text-muted-foreground">
                 {browserResult
-                  ? `${browserResult.tokens ?? tokenEstimate} tokens checked in browser`
-                  : "Run starts by validating the current SKILL.md locally."}
+                  ? `${browserResult.tokens ?? tokenEstimate} tokens`
+                  : `${tokenEstimate} tokens`}
               </p>
             </div>
           </section>
+
+          <PackageReference />
 
           <div
             className="grid min-h-0 flex-1 content-start gap-5 overflow-auto px-4 py-5 sm:px-5"
@@ -657,6 +646,50 @@ function mockMessageClass(role: MockChatMessage["role"]): string {
   const base = "group flex w-full max-w-[95%] flex-col gap-2";
   if (role === "user") return `${base} is-user ml-auto justify-end`;
   return `${base} is-assistant`;
+}
+
+function PackageReference() {
+  return (
+    <section className="shrink-0 border-b px-4 py-4 sm:px-5" aria-label="Package reference">
+      <div className="grid gap-4 text-sm">
+        <div className="flex flex-wrap gap-2">
+          <a
+            className={outlineButtonClass}
+            href="https://github.com/WebMCP-org/agent-skills-ts-sdk"
+            rel="noreferrer"
+            target="_blank"
+          >
+            <Github size={16} />
+            GitHub
+          </a>
+          <a
+            className={outlineButtonClass}
+            href="https://github.com/WebMCP-org/agent-skills-ts-sdk/blob/main/README.md"
+            rel="noreferrer"
+            target="_blank"
+          >
+            README
+          </a>
+        </div>
+        <div className="grid gap-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            API
+          </h3>
+          <code className="break-words rounded-md bg-muted/50 px-3 py-2 text-xs leading-5">
+            parseSkillContent · validateSkillContent · toPrompt · estimateTokens
+          </code>
+        </div>
+        <div className="grid gap-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Agent Tool
+          </h3>
+          <code className="break-words rounded-md bg-muted/50 px-3 py-2 text-xs leading-5">
+            read_skill → {"<available_skills>"}
+          </code>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function ToolMessage({ content }: { content: string }) {
@@ -927,13 +960,7 @@ function createSavedSkillRecord(content: string, fallback: SkillFormData): Saved
 function createInitialMockMessages(skill: SkillFormData): MockChatMessage[] {
   return [
     {
-      content:
-        "Ask the mock agent to use the current skill. The transcript is generated locally in the browser and rendered with CopilotKit's Markdown UI.",
-      id: "assistant-initial",
-      role: "assistant",
-    },
-    {
-      content: `Use the \`${skill.name}\` skill for this request.`,
+      content: `Use \`${skill.name}\`.`,
       id: "user-initial",
       role: "user",
     },
@@ -948,15 +975,11 @@ function createMockAgentMessages(
   parseError?: string,
 ): MockChatMessage[] {
   const parsed = parseContent(content);
-  const validationSummary =
-    parsed.ok && validationErrors.length === 0
-      ? "The skill validates successfully in the browser."
-      : "The skill has validation issues, so the agent would ask for a fix before relying on it.";
   const toolSummary =
     parsed.ok && validationErrors.length === 0
-      ? `Parsed \`${skill.name}\`, validated the SKILL.md, and exposed the prompt metadata.`
+      ? `read_skill(${skill.name})`
       : [
-          `Tried to parse \`${skill.name}\` from browser state.`,
+          `read_skill(${skill.name}) failed.`,
           parseError ? `Parser error: ${parseError}` : null,
           validationErrors.length > 0 ? `Validation errors: ${validationErrors.join("; ")}` : null,
         ]
@@ -965,7 +988,7 @@ function createMockAgentMessages(
 
   return [
     {
-      content: `Use the \`${skill.name}\` skill to help with a package README update.`,
+      content: `Use \`${skill.name}\` for README work.`,
       id: "user-run",
       role: "user",
     },
@@ -978,18 +1001,9 @@ function createMockAgentMessages(
     },
     {
       content: [
-        `I would activate **${skill.name}** because its description says:`,
-        "",
-        `> ${skill.description}`,
-        "",
-        validationSummary,
-        "",
-        "Using the skill, I would:",
-        "",
-        "- inspect the README audience and current package exports",
-        "- keep the first runnable example short",
-        "- call out compatibility and validation constraints",
-        "- return replacement-ready Markdown rather than a vague summary",
+        `Activated **${skill.name}**.`,
+        `Description: ${skill.description}`,
+        `Allowed tools: ${skill.allowedTools || "none"}`,
       ].join("\n"),
       id: "assistant-run",
       role: "assistant",
