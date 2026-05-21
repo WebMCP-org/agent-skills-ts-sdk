@@ -1,5 +1,6 @@
 import {
   AlertCircle,
+  ChevronDown,
   Code2,
   CheckCircle2,
   Copy,
@@ -10,6 +11,7 @@ import {
   Save,
   Trash2,
   WandSparkles,
+  Wrench,
 } from "lucide-react";
 import { Markdown } from "@copilotkit/react-ui";
 // @ts-ignore Vite handles CSS side-effect imports in the playground build.
@@ -68,6 +70,16 @@ type MockChatMessage = {
 };
 
 type PreviewMode = "raw" | "visual";
+
+const buttonBaseClass =
+  "inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-md px-3 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50";
+const ghostButtonClass = `${buttonBaseClass} hover:bg-accent hover:text-accent-foreground`;
+const outlineButtonClass = `${buttonBaseClass} border bg-background hover:bg-accent hover:text-accent-foreground`;
+const primaryButtonClass = `${buttonBaseClass} bg-primary text-primary-foreground hover:bg-primary/90`;
+const inputClass =
+  "h-10 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/20";
+const textareaClass =
+  "w-full min-w-0 rounded-md border border-input bg-background px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/20";
 
 declare global {
   interface Window {
@@ -267,7 +279,7 @@ function App() {
   }, [content, formData, promptPreview, validateInBrowser]);
 
   return (
-    <main className="min-h-dvh bg-background p-4 text-foreground sm:p-6">
+    <main className="min-h-dvh bg-background p-4 text-foreground sm:p-6 lg:p-8">
       <section
         className="mx-auto grid w-full max-w-7xl gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(380px,0.8fr)]"
         aria-label="Skill editor and agent mock"
@@ -291,19 +303,14 @@ function App() {
             </div>
           </header>
 
-          <section className="min-w-0 rounded-lg border bg-card p-4 shadow-sm">
-            <div className="mb-4 flex flex-wrap gap-2" aria-label="Editor actions">
-              <button
-                className="inline-flex h-9 items-center gap-2 rounded-md border bg-card px-3 text-sm font-medium transition-colors hover:bg-muted/50"
-                type="button"
-                onClick={resetSkill}
-                title="Reset skill"
-              >
+          <section className="min-w-0 rounded-lg border bg-card p-4">
+            <div className="mb-6 flex flex-wrap gap-2" aria-label="Editor actions">
+              <button className={outlineButtonClass} type="button" onClick={resetSkill}>
                 <RefreshCcw size={16} />
                 Reset
               </button>
               <button
-                className="inline-flex h-9 items-center gap-2 rounded-md border bg-card px-3 text-sm font-medium transition-colors hover:bg-muted/50"
+                className={outlineButtonClass}
                 type="button"
                 onClick={() => void loadExample(examples[0].id)}
               >
@@ -311,7 +318,7 @@ function App() {
                 README skill
               </button>
               <button
-                className="inline-flex h-9 items-center gap-2 rounded-md border bg-card px-3 text-sm font-medium transition-colors hover:bg-muted/50"
+                className={outlineButtonClass}
                 type="button"
                 onClick={() => void loadExample(examples[1].id)}
               >
@@ -320,68 +327,96 @@ function App() {
               </button>
             </div>
 
-            <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+            <div className="space-y-6">
               <Field label="Name" detail={`${formData.name.length}/64`}>
                 <input
-                  className="h-10 w-full min-w-0 rounded-md border bg-background px-3 text-sm outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20"
+                  className={inputClass}
                   data-mono="true"
                   value={formData.name}
                   onChange={updateField("name")}
                   spellCheck={false}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Lowercase letters, numbers, and hyphens only
+                </p>
               </Field>
-              <Field label="License">
-                <input
-                  className="h-10 w-full min-w-0 rounded-md border bg-background px-3 text-sm outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20"
-                  value={formData.license}
-                  onChange={updateField("license")}
-                />
-              </Field>
-              <Field label="Description" detail={`${formData.description.length}/1024`} wide>
+              <Field label="Description" detail={`${formData.description.length}/1024`}>
                 <textarea
-                  className="min-h-20 w-full min-w-0 resize-none rounded-md border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20"
+                  className={`${textareaClass} min-h-20 resize-none`}
                   value={formData.description}
                   onChange={updateField("description")}
+                  placeholder="Describe what this skill does and when the agent should use it..."
                 />
+                <p className="text-xs text-muted-foreground">
+                  Explain what the skill does and when to use it
+                </p>
               </Field>
-              <Field label="Compatibility" detail={`${formData.compatibility.length}/500`} wide>
-                <input
-                  className="h-10 w-full min-w-0 rounded-md border bg-background px-3 text-sm outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20"
-                  value={formData.compatibility}
-                  onChange={updateField("compatibility")}
-                />
-              </Field>
-              <Field label="Allowed tools" wide>
-                <input
-                  className="h-10 w-full min-w-0 rounded-md border bg-background px-3 text-sm outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20"
-                  data-mono="true"
-                  value={formData.allowedTools}
-                  onChange={updateField("allowedTools")}
-                />
-              </Field>
-              <Field label="Instructions" wide>
+
+              <details className="group">
+                <summary
+                  className={`${ghostButtonClass} flex w-full list-none justify-between px-0 hover:bg-transparent [&::-webkit-details-marker]:hidden`}
+                >
+                  <span className="text-sm font-medium text-muted-foreground">Optional Fields</span>
+                  <ChevronDown className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="space-y-4 pt-4">
+                  <Field label="Compatibility" detail={`${formData.compatibility.length}/500`}>
+                    <input
+                      className={inputClass}
+                      value={formData.compatibility}
+                      onChange={updateField("compatibility")}
+                      placeholder="Requires Node.js 22+, filesystem access"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Environment requirements (optional)
+                    </p>
+                  </Field>
+                  <Field label="License">
+                    <input
+                      className={inputClass}
+                      value={formData.license}
+                      onChange={updateField("license")}
+                      placeholder="MIT"
+                    />
+                  </Field>
+                  <Field label="Allowed Tools">
+                    <input
+                      className={inputClass}
+                      data-mono="true"
+                      value={formData.allowedTools}
+                      onChange={updateField("allowedTools")}
+                      placeholder="Bash(git:*) Read Write"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Space-separated list of pre-approved tools (advanced)
+                    </p>
+                  </Field>
+                </div>
+              </details>
+
+              <Field label="Instructions (Markdown)">
                 <textarea
-                  className="min-h-[240px] w-full min-w-0 resize-y rounded-md border bg-background px-3 py-2 font-mono text-sm leading-6 outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20"
+                  className={`${textareaClass} min-h-[240px] resize-y font-mono leading-6`}
                   data-mono="true"
                   value={formData.body}
                   onChange={updateField("body")}
                   spellCheck={false}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Markdown content that teaches the agent how to help
+                </p>
               </Field>
             </div>
           </section>
 
-          <section
-            className="min-w-0 rounded-lg border bg-card p-4 shadow-sm"
-            aria-label="IndexedDB storage"
-          >
+          <section className="min-w-0 rounded-lg border bg-card p-4" aria-label="IndexedDB storage">
             <div className="mb-3 flex items-center justify-between gap-3">
               <h2 className="flex items-center gap-2 text-sm font-semibold">
                 <Database className="size-4 text-muted-foreground" />
                 IndexedDB
               </h2>
               <button
-                className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                className={primaryButtonClass}
                 type="button"
                 onClick={() => void saveSnapshot()}
               >
@@ -401,7 +436,7 @@ function App() {
                 savedSkills.map((skill) => (
                   <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2" key={skill.id}>
                     <button
-                      className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md border bg-card px-3 py-2 text-left transition-colors hover:bg-muted/50"
+                      className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md border bg-background px-3 py-2 text-left transition-colors hover:bg-accent hover:text-accent-foreground"
                       type="button"
                       onClick={() => void loadSavedSkill(skill)}
                     >
@@ -416,7 +451,7 @@ function App() {
                       </code>
                     </button>
                     <button
-                      className="inline-flex size-9 items-center justify-center rounded-md border bg-card text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                      className="inline-flex size-9 items-center justify-center rounded-md border bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                       type="button"
                       onClick={() => void deleteSavedSkill(skill)}
                       title={`Delete ${skill.name}`}
@@ -429,10 +464,7 @@ function App() {
             </div>
           </section>
 
-          <section
-            className="min-w-0 rounded-lg border bg-card p-4 shadow-sm"
-            aria-label="SKILL.md preview"
-          >
+          <section className="min-w-0 rounded-lg border bg-card p-4" aria-label="SKILL.md preview">
             <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-sm font-semibold">SKILL.md</h2>
               <div className="flex flex-wrap gap-2">
@@ -458,7 +490,7 @@ function App() {
                   </button>
                 </div>
                 <button
-                  className="inline-flex h-9 items-center gap-2 rounded-md border bg-card px-3 text-sm font-medium transition-colors hover:bg-muted/50"
+                  className={outlineButtonClass}
                   type="button"
                   onClick={() => void copySkill()}
                 >
@@ -468,7 +500,7 @@ function App() {
               </div>
             </div>
             {skillPreviewMode === "raw" ? (
-              <pre className="max-h-[420px] overflow-auto rounded-md bg-foreground p-4 text-xs leading-5 text-background">
+              <pre className="max-h-[420px] overflow-auto rounded-md bg-muted/50 p-4 text-xs leading-5 text-foreground">
                 {content}
               </pre>
             ) : (
@@ -478,7 +510,7 @@ function App() {
         </section>
 
         <section
-          className="flex min-h-[680px] min-w-0 flex-col overflow-hidden rounded-lg border bg-card p-4 shadow-sm lg:sticky lg:top-6 lg:max-h-[calc(100dvh-3rem)]"
+          className="flex min-h-[680px] min-w-0 flex-col overflow-hidden rounded-lg border bg-card p-4 lg:sticky lg:top-8 lg:max-h-[calc(100dvh-4rem)]"
           aria-label="CopilotKit mock agent"
         >
           <header className="mb-4 flex items-center justify-between gap-3">
@@ -488,11 +520,7 @@ function App() {
               </p>
               <h1 className="text-2xl font-bold tracking-tight">Agent run</h1>
             </div>
-            <button
-              className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-              type="button"
-              onClick={runMockAgent}
-            >
+            <button className={primaryButtonClass} type="button" onClick={runMockAgent}>
               <Play size={16} />
               Run with skill
             </button>
@@ -522,19 +550,20 @@ function App() {
           </section>
 
           <div
-            className="grid min-h-0 flex-1 content-start gap-3 overflow-auto rounded-lg border bg-background p-4"
+            className="grid min-h-0 flex-1 content-start gap-4 overflow-auto rounded-lg border bg-background p-4"
             aria-label="Mock CopilotKit chat transcript"
           >
-            {mockMessages.map((message) => (
-              <div className={mockMessageClass(message.role)} key={message.id}>
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  {message.role === "tool" ? "read_skill tool" : message.role}
-                </span>
-                <div className="text-sm leading-6 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_pre]:overflow-auto [&_pre]:rounded-md [&_pre]:bg-muted/70 [&_pre]:p-3 [&_ul]:ml-5 [&_ul]:list-disc">
-                  <Markdown content={message.content} />
+            {mockMessages.map((message) =>
+              message.role === "tool" ? (
+                <ToolMessage content={message.content} key={message.id} />
+              ) : (
+                <div className={mockMessageClass(message.role)} key={message.id}>
+                  <div className="flex w-fit min-w-0 max-w-full flex-col gap-2 overflow-hidden text-sm leading-6 group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:bg-secondary group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_pre]:overflow-auto [&_pre]:rounded-md [&_pre]:bg-muted/70 [&_pre]:p-3 [&_ul]:ml-5 [&_ul]:list-disc">
+                    <Markdown content={message.content} />
+                  </div>
                 </div>
-              </div>
-            ))}
+              ),
+            )}
           </div>
         </section>
       </section>
@@ -593,10 +622,35 @@ function previewButtonClass(active: boolean): string {
 }
 
 function mockMessageClass(role: MockChatMessage["role"]): string {
-  const base = "grid gap-2 rounded-lg border p-3";
-  if (role === "user") return `${base} ml-auto max-w-[85%] bg-secondary text-secondary-foreground`;
-  if (role === "tool") return `${base} bg-muted/50`;
-  return `${base} max-w-[92%] bg-card`;
+  const base = "group flex w-full max-w-[95%] flex-col gap-2";
+  if (role === "user") return `${base} is-user ml-auto justify-end`;
+  return `${base} is-assistant`;
+}
+
+function ToolMessage({ content }: { content: string }) {
+  return (
+    <div className="group not-prose mb-3 w-full rounded-xl border">
+      <div className="flex w-full items-center justify-between gap-3 p-3 text-left">
+        <div className="flex min-w-0 items-center gap-2">
+          <Wrench className="size-4 shrink-0 text-muted-foreground" />
+          <span className="truncate text-sm font-medium">read_skill</span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-2 py-0.5 text-[11px] font-medium text-secondary-foreground">
+            <CheckCircle2 className="size-3.5 text-success" />
+            Completed
+          </span>
+        </div>
+        <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+      </div>
+      <div className="space-y-3 border-t px-4 py-3 text-popover-foreground">
+        <h4 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          Result
+        </h4>
+        <div className="overflow-x-auto rounded-md bg-muted/50 p-3 text-xs leading-5 text-foreground [&_code]:rounded [&_code]:bg-background [&_code]:px-1 [&_pre]:overflow-auto [&_pre]:whitespace-pre-wrap [&_ul]:ml-5 [&_ul]:list-disc">
+          <Markdown content={content} />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function SkillVisual({
