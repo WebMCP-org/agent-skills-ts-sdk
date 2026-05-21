@@ -1,4 +1,4 @@
-import { ChevronDown, Code2, Copy, Eye, Github, Loader2 } from "lucide-react";
+import { Bot, ChevronDown, Code2, Copy, FileText, Github, Loader2, Pencil } from "lucide-react";
 import {
   AbstractAgent,
   CopilotChat,
@@ -24,6 +24,8 @@ import { createRoot, type Root } from "react-dom/client";
 import {
   estimateTokens,
   parseSkillContent,
+  toDisclosureInstructions,
+  toPrompt,
   validateSkillContent,
   type SkillProperties,
 } from "../../src/index.ts";
@@ -48,7 +50,7 @@ type SavedSkill = {
   updatedAt: number;
 };
 
-type ViewMode = "reader" | "raw" | "edit";
+type ViewMode = "context" | "edit" | "reader" | "raw";
 
 type SkillAgentSnapshot = {
   name: string;
@@ -70,22 +72,23 @@ const skillsStoreName = "skills";
 
 const defaultSkill: SkillFormData = {
   allowedTools: "Read Grep Bash(pnpm:*)",
-  body: `# Skill Editor Demo
+  body: `# Runtime Skill Demo
 
-Use this skill when you need to inspect, validate, or refine a SKILL.md file.
+Use this skill when an agent needs to load a saved SKILL.md file, validate it, and decide whether the instructions apply to the current request.
 
 ## Workflow
 
-1. Confirm the skill name and description match the behavior.
-2. Check validation errors before saving.
-3. Preview the prompt metadata that an agent sees.
-4. Keep detailed instructions in the body, not in the description.
+1. Read the saved skill from the host store.
+2. Parse frontmatter into typed properties.
+3. Validate the SKILL.md before exposing it to the model.
+4. Add the skill metadata to the agent context.
+5. Disclose the detailed instructions only when the task matches.
 `,
   compatibility: "Works with AgentSkills-compatible hosts.",
   description:
-    "Inspect and refine SKILL.md files with live parsing, validation, prompt previews, and patch output.",
+    "Shows how agent-skills-ts-sdk turns a saved SKILL.md file into validated metadata and agent context.",
   license: "MIT",
-  name: "skill-editor-demo",
+  name: "runtime-skill-demo",
 };
 
 function App() {
@@ -101,11 +104,15 @@ function App() {
   const savedContent = savedSkill.content;
   const savedParsed = useMemo(() => parseContent(savedContent), [savedContent]);
   const savedValidationErrors = useMemo(() => validateSkillContent(savedContent), [savedContent]);
+  const agentContext = useMemo(
+    () => createAgentContext(savedContent, savedSkill.id),
+    [savedContent, savedSkill.id],
+  );
   const hasChanges = content !== savedContent;
   const isValid = savedParsed.ok && savedValidationErrors.length === 0;
   const skillAgent = useMemo(
-    () => new BrowserSkillAgent(() => ({ name: formData.name })),
-    [formData.name],
+    () => new BrowserSkillAgent(() => ({ name: savedSkill.id })),
+    [savedSkill.id],
   );
 
   useEffect(() => {
@@ -135,6 +142,7 @@ function App() {
   const resetSkill = useCallback(() => {
     setFormData(createFormDataFromContent(savedContent, defaultSkill));
     setStorageMessage(null);
+    setViewMode("reader");
   }, [savedContent]);
 
   const saveSnapshot = useCallback(async () => {
@@ -151,6 +159,8 @@ function App() {
     window.setTimeout(() => setCopied(null), 1200);
   }, [savedContent]);
 
+  const showEditor = viewMode === "edit";
+
   return (
     <main className="flex h-dvh min-h-dvh flex-col overflow-hidden bg-background text-foreground">
       <header className="shrink-0 border-b">
@@ -159,16 +169,17 @@ function App() {
             <p className="font-mono text-xs font-semibold text-muted-foreground">
               agent-skills-ts-sdk
             </p>
-            <h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl">Skill Reader</h1>
+            <h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl">
+              Runtime skill demo
+            </h1>
           </div>
           <div className="hidden min-w-0 items-center gap-2 lg:flex" aria-label="Current status">
             <StatusPill tone={isValid ? "success" : "error"}>
               {isValid ? "Valid" : "Needs Work"}
             </StatusPill>
             <StatusPill tone="neutral">{savedSkill.tokens} tokens</StatusPill>
-            <StatusPill tone={hasChanges ? "warn" : "neutral"}>
-              {hasChanges ? "Unsaved" : "Saved"}
-            </StatusPill>
+            <StatusPill tone="neutral">IndexedDB</StatusPill>
+            {hasChanges ? <StatusPill tone="warn">Unsaved edit</StatusPill> : null}
             {storageMessage ? <StatusPill tone="neutral">{storageMessage}</StatusPill> : null}
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -192,6 +203,15 @@ function App() {
             <button
               className={buttonClass({ variant: "outline" })}
               type="button"
+              aria-pressed={showEditor}
+              onClick={() => setViewMode(showEditor ? "reader" : "edit")}
+            >
+              <Pencil size={15} />
+              <span className="hidden sm:inline">{showEditor ? "Close" : "Edit"}</span>
+            </button>
+            <button
+              className={buttonClass({ variant: "outline" })}
+              type="button"
               onClick={() => void copySkill()}
             >
               <Copy size={15} />
@@ -206,8 +226,16 @@ function App() {
               type="button"
               onClick={() => setViewMode("reader")}
             >
-              <Eye size={15} />
-              Skill
+              <FileText size={15} />
+              SKILL.md
+            </button>
+            <button
+              className={previewButtonClass(viewMode === "context")}
+              type="button"
+              onClick={() => setViewMode("context")}
+            >
+              <Bot size={15} />
+              Agent context
             </button>
             <button
               className={previewButtonClass(viewMode === "raw")}
@@ -217,20 +245,13 @@ function App() {
               <Code2 size={15} />
               Raw
             </button>
-            <button
-              className={previewButtonClass(viewMode === "edit")}
-              type="button"
-              onClick={() => setViewMode("edit")}
-            >
-              Edit
-            </button>
           </div>
         </div>
       </header>
 
       <section
         className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(420px,32rem)]"
-        aria-label="Skill editor and agent mock"
+        aria-label="Skill runtime demo and agent mock"
       >
         <section className="flex min-h-0 min-w-0 flex-col" aria-label="Skill workspace">
           <div className="min-h-0 flex-1 overflow-auto px-4 py-6 sm:px-6 lg:px-8">
@@ -241,6 +262,10 @@ function App() {
                   savedSkill={savedSkill}
                   validationErrors={savedValidationErrors}
                 />
+              </div>
+            ) : viewMode === "context" ? (
+              <div className="mx-auto max-w-4xl">
+                <AgentContextView context={agentContext} />
               </div>
             ) : viewMode === "raw" ? (
               <div className="mx-auto max-w-4xl space-y-4">
@@ -274,9 +299,9 @@ function App() {
                 agentId="skill-agent"
                 className="h-full min-h-0 w-full"
                 labels={{
-                  chatInputPlaceholder: "Ask the agent to use this skill...",
+                  chatInputPlaceholder: "Ask the agent to use the saved skill...",
                   chatDisclaimerText: "",
-                  welcomeMessageText: "Ask the agent to use the current skill.",
+                  welcomeMessageText: "Ask the agent to use the saved SKILL.md.",
                 }}
               />
             </CopilotKitProvider>
@@ -868,6 +893,60 @@ function SkillReader({
   );
 }
 
+function AgentContextView({
+  context,
+}: {
+  context:
+    | {
+        disclosureInstructions: string;
+        ok: true;
+        prompt: string;
+        properties: SkillProperties;
+      }
+    | { error: string; ok: false };
+}) {
+  if (!context.ok) {
+    return (
+      <div className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-destructive">
+        <strong className="text-sm font-medium">Unable to build agent context</strong>
+        <p className="mt-1 text-sm">{context.error}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-6">
+      <div className="border-b pb-5">
+        <h2 className="text-2xl font-semibold tracking-tight">Agent context</h2>
+        <dl className="mt-4 grid gap-x-5 gap-y-2 text-sm sm:grid-cols-[150px_minmax(0,1fr)]">
+          <dt className="font-medium text-muted-foreground">Parsed name</dt>
+          <dd>
+            <code className="rounded bg-muted px-1 py-0.5">{context.properties.name}</code>
+          </dd>
+          <dt className="font-medium text-muted-foreground">Validation</dt>
+          <dd>Browser runtime</dd>
+          <dt className="font-medium text-muted-foreground">Prompt output</dt>
+          <dd>
+            <code className="rounded bg-muted px-1 py-0.5">toPrompt</code>
+          </dd>
+        </dl>
+      </div>
+      <section className="grid gap-2">
+        <h3 className="text-sm font-semibold">Available skills XML</h3>
+        <pre className="overflow-auto rounded-md bg-muted/50 p-4 text-xs leading-5">
+          {context.prompt}
+        </pre>
+      </section>
+      <section className="grid gap-2">
+        <h3 className="text-sm font-semibold">Progressive disclosure instruction</h3>
+        <pre className="overflow-auto rounded-md bg-muted/50 p-4 text-xs leading-5">
+          {context.disclosureInstructions}
+        </pre>
+      </section>
+    </div>
+  );
+}
+
 function MarkdownBody({ markdown }: { markdown: string }) {
   const blocks = parseMarkdownBlocks(markdown);
 
@@ -932,6 +1011,31 @@ function parseContent(
 ): { body: string; ok: true; properties: SkillProperties } | { error: string; ok: false } {
   try {
     return { ok: true, ...parseSkillContent(content) };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+function createAgentContext(
+  content: string,
+  id: string,
+):
+  | {
+      disclosureInstructions: string;
+      ok: true;
+      prompt: string;
+      properties: SkillProperties;
+    }
+  | { error: string; ok: false } {
+  try {
+    const { properties } = parseSkillContent(content);
+
+    return {
+      disclosureInstructions: toDisclosureInstructions({ toolName: "read_skill" }),
+      ok: true,
+      prompt: toPrompt([{ content, location: `indexeddb:${skillsStoreName}/${id}` }]),
+      properties,
+    };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
