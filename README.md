@@ -23,8 +23,8 @@ pnpm add agent-skills-ts-sdk
 
 ## Playground
 
-This repo includes a small React + Cloudflare Worker playground for trying the
-SDK against editable `SKILL.md` content.
+This repo includes a small browser-run React playground for trying the SDK
+against editable `SKILL.md` content.
 
 ```bash
 pnpm playground:dev
@@ -32,7 +32,9 @@ pnpm playground:dev
 
 The playground shows live browser-side parsing and validation, prompt metadata,
 token estimates, patch generation, IndexedDB storage, and raw/rendered Markdown
-previews using the same SDK entry points.
+previews using the same SDK entry points. It also includes a CopilotKit-rendered
+mock agent transcript that simulates a model reading and using the active skill
+without any backend LLM call.
 
 ## Usage
 

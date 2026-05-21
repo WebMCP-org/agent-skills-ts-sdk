@@ -3,6 +3,7 @@ packages:
   - playground
 
 allowBuilds:
+  "@scarf/scarf": false
   esbuild: true
   fallow: true
   opensrc: false

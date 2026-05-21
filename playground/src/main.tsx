@@ -1,5 +1,6 @@
 import {
   AlertCircle,
+  Bot,
   Braces,
   Code2,
   CheckCircle2,
@@ -13,8 +14,11 @@ import {
   Trash2,
   WandSparkles,
 } from "lucide-react";
+import { Markdown } from "@copilotkit/react-ui";
+// @ts-ignore Vite handles CSS side-effect imports in the playground build.
+import "@copilotkit/react-ui/styles.css";
 import { StrictMode, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, type Root } from "react-dom/client";
 import {
   createSkillPatch,
   estimateTokens,
@@ -35,11 +39,11 @@ type SkillFormData = {
   name: string;
 };
 
-type ExampleSummary = {
+type ExampleSkill = {
+  content: string;
   description: string;
   id: string;
   name: string;
-  tokens: number;
 };
 
 type BrowserValidationResult = {
@@ -61,11 +65,77 @@ type SavedSkill = {
   updatedAt: number;
 };
 
+type MockChatMessage = {
+  content: string;
+  id: string;
+  role: "assistant" | "tool" | "user";
+};
+
 type PreviewMode = "raw" | "visual";
+
+declare global {
+  interface Window {
+    __agentSkillsPlaygroundRoot?: Root;
+  }
+}
 
 const skillDbName = "agent-skills-ts-sdk-playground";
 const skillDbVersion = 1;
 const skillsStoreName = "skills";
+
+const sampleSkills: ExampleSkill[] = [
+  {
+    id: "readme-writer",
+    name: "readme-writer",
+    description: "Drafts README updates for TypeScript package maintainers.",
+    content: `---
+name: readme-writer
+description: Draft README sections for TypeScript package maintainers when public docs need clearer installation, usage, API, or release guidance.
+license: MIT
+compatibility: Works best in npm package repositories with package.json and TypeScript source.
+allowed-tools: Read Grep Glob
+---
+# README Writer
+
+Use this skill when README changes need to explain a TypeScript package to users.
+
+## Workflow
+
+1. Read \`package.json\`, the public exports, and existing README sections.
+2. Identify the reader: evaluator, first-time user, contributor, or maintainer.
+3. Keep install and first-use examples short enough to run in one sitting.
+4. Name compatibility constraints directly.
+5. Prefer concrete examples over broad claims.
+
+## Output
+
+Return replacement-ready Markdown and call out any facts that need maintainer confirmation.
+`,
+  },
+  {
+    id: "cloudflare-worker-review",
+    name: "cloudflare-worker-review",
+    description:
+      "Reviews Cloudflare Worker code for deployable request handling and package-demo clarity.",
+    content: `---
+name: cloudflare-worker-review
+description: Review Cloudflare Worker examples for small SDK repos before publishing demos or docs.
+compatibility: Cloudflare Workers, Vite, and TypeScript.
+allowed-tools: Read Grep Bash(npm:*) Bash(pnpm:*)
+---
+# Cloudflare Worker Review
+
+Check that the Worker example is easy to run and demonstrates the package without hiding important code.
+
+## Review Points
+
+- The Worker should expose a narrow, inspectable API.
+- Responses should include status codes and JSON content types.
+- The example should avoid production-only configuration.
+- The README should explain local development and deployment separately.
+`,
+  },
+];
 
 const defaultSkill: SkillFormData = {
   allowedTools: "Read Grep Bash(pnpm:*)",
@@ -90,11 +160,14 @@ Use this skill when you need to inspect, validate, or refine a SKILL.md file.
 function App() {
   const [formData, setFormData] = useState(defaultSkill);
   const [savedContent, setSavedContent] = useState(() => assembleSkillContent(defaultSkill));
-  const [examples, setExamples] = useState<ExampleSummary[]>([]);
+  const [examples] = useState<ExampleSkill[]>(sampleSkills);
   const [savedSkills, setSavedSkills] = useState<SavedSkill[]>([]);
   const [browserResult, setBrowserResult] = useState<BrowserValidationResult | null>(null);
   const [storageMessage, setStorageMessage] = useState<string | null>(null);
   const [skillPreviewMode, setSkillPreviewMode] = useState<PreviewMode>("raw");
+  const [mockMessages, setMockMessages] = useState<MockChatMessage[]>(() =>
+    createInitialMockMessages(defaultSkill),
+  );
   const [copied, setCopied] = useState<"content" | "prompt" | "patch" | null>(null);
 
   const content = useMemo(() => assembleSkillContent(formData), [formData]);
@@ -112,13 +185,6 @@ function App() {
   const hasChanges = content !== savedContent;
 
   useEffect(() => {
-    void fetch("/api/examples")
-      .then((response) => response.json() as Promise<{ skills: ExampleSummary[] }>)
-      .then((data) => setExamples(data.skills))
-      .catch(() => setExamples([]));
-  }, []);
-
-  useEffect(() => {
     void refreshSavedSkills(setSavedSkills);
   }, []);
 
@@ -131,13 +197,13 @@ function App() {
   );
 
   const loadExample = useCallback(async (id: string) => {
-    const response = await fetch(`/api/examples/${encodeURIComponent(id)}`);
-    const example = (await response.json()) as { content?: string };
-    if (example.content) {
+    const example = sampleSkills.find((skill) => skill.id === id);
+    if (example) {
       const next = parseToFormData(example.content);
       setFormData(next);
       setSavedContent(example.content);
       setBrowserResult(null);
+      setMockMessages(createInitialMockMessages(next));
     }
   }, []);
 
@@ -162,10 +228,12 @@ function App() {
   }, [content, formData]);
 
   const loadSavedSkill = useCallback(async (skill: SavedSkill) => {
-    setFormData(parseToFormData(skill.content));
+    const next = parseToFormData(skill.content);
+    setFormData(next);
     setSavedContent(skill.content);
     setBrowserResult(null);
     setStorageMessage(`Loaded ${skill.name} from IndexedDB`);
+    setMockMessages(createInitialMockMessages(next));
   }, []);
 
   const deleteSavedSkill = useCallback(async (skill: SavedSkill) => {
@@ -179,6 +247,10 @@ function App() {
     setCopied(kind);
     window.setTimeout(() => setCopied(null), 1200);
   }, []);
+
+  const runMockAgent = useCallback(() => {
+    setMockMessages(createMockAgentMessages(formData, content, promptPreview, validationErrors));
+  }, [content, formData, promptPreview, validationErrors]);
 
   return (
     <main className="shell">
@@ -251,8 +323,8 @@ function App() {
             <section className="panel">
               <div className="panel-heading">
                 <div>
-                  <h2>Worker examples</h2>
-                  <p>Samples are served from the Cloudflare Worker.</p>
+                  <h2>Browser examples</h2>
+                  <p>Sample skills are bundled with the browser playground.</p>
                 </div>
                 <WandSparkles size={18} />
               </div>
@@ -268,7 +340,7 @@ function App() {
                       <strong>{example.name}</strong>
                       <small>{example.description}</small>
                     </span>
-                    <code>{example.tokens}</code>
+                    <code>{estimateTokens(example.content)}</code>
                   </button>
                 ))}
               </div>
@@ -295,7 +367,7 @@ function App() {
                 Validate in browser
               </button>
               {browserResult && (
-                <div className="worker-result">
+                <div className="browser-result">
                   <strong>
                     {browserResult.ok ? "Browser validation passed" : "Browser validation failed"}
                   </strong>
@@ -342,6 +414,28 @@ function App() {
                   ))
                 )}
               </div>
+            </section>
+
+            <section className="panel mock-agent-panel">
+              <div className="panel-heading">
+                <div>
+                  <h2>CopilotKit mock</h2>
+                  <p>Local agent UI simulation with no backend model call.</p>
+                </div>
+                <Bot size={18} />
+              </div>
+              <div className="mock-chat" aria-label="Mock CopilotKit chat transcript">
+                {mockMessages.map((message) => (
+                  <div className={`mock-message ${message.role}`} key={message.id}>
+                    <span>{message.role === "tool" ? "read_skill" : message.role}</span>
+                    <Markdown content={message.content} />
+                  </div>
+                ))}
+              </div>
+              <button className="primary-button" type="button" onClick={runMockAgent}>
+                <Play size={16} />
+                Run mock agent
+              </button>
             </section>
           </aside>
         </section>
@@ -742,6 +836,72 @@ function createSavedSkillRecord(content: string, fallback: SkillFormData): Saved
   };
 }
 
+function createInitialMockMessages(skill: SkillFormData): MockChatMessage[] {
+  return [
+    {
+      content:
+        "Ask the mock agent to use the current skill. The transcript is generated locally in the browser and rendered with CopilotKit's Markdown UI.",
+      id: "assistant-initial",
+      role: "assistant",
+    },
+    {
+      content: `Use the \`${skill.name}\` skill for this request.`,
+      id: "user-initial",
+      role: "user",
+    },
+  ];
+}
+
+function createMockAgentMessages(
+  skill: SkillFormData,
+  content: string,
+  promptPreview: string,
+  validationErrors: string[],
+): MockChatMessage[] {
+  const parsed = parseContent(content);
+  const validationSummary =
+    parsed.ok && validationErrors.length === 0
+      ? "The skill validates successfully in the browser."
+      : "The skill has validation issues, so the agent would ask for a fix before relying on it.";
+
+  return [
+    {
+      content: `Use the \`${skill.name}\` skill to help with a package README update.`,
+      id: "user-run",
+      role: "user",
+    },
+    {
+      content: [
+        `Loaded \`${skill.name}\` from browser state.`,
+        "",
+        "```xml",
+        promptPreview || "<available_skills />",
+        "```",
+      ].join("\n"),
+      id: "tool-read-skill",
+      role: "tool",
+    },
+    {
+      content: [
+        `I would activate **${skill.name}** because its description says:`,
+        "",
+        `> ${skill.description}`,
+        "",
+        validationSummary,
+        "",
+        "Using the skill, I would:",
+        "",
+        "- inspect the README audience and current package exports",
+        "- keep the first runnable example short",
+        "- call out compatibility and validation constraints",
+        "- return replacement-ready Markdown rather than a vague summary",
+      ].join("\n"),
+      id: "assistant-run",
+      role: "assistant",
+    },
+  ];
+}
+
 async function refreshSavedSkills(setSavedSkills: (skills: SavedSkill[]) => void): Promise<void> {
   const skills = await getSavedSkills();
   setSavedSkills(skills.sort((a, b) => b.updatedAt - a.updatedAt));
@@ -801,7 +961,16 @@ function openSkillDb(): Promise<IDBDatabase> {
   });
 }
 
-createRoot(document.getElementById("root")!).render(
+const rootElement = document.getElementById("root");
+
+if (!rootElement) {
+  throw new Error("Root element not found.");
+}
+
+const root = window.__agentSkillsPlaygroundRoot ?? createRoot(rootElement);
+window.__agentSkillsPlaygroundRoot = root;
+
+root.render(
   <StrictMode>
     <App />
   </StrictMode>,
