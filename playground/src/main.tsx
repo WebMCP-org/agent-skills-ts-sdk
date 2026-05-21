@@ -69,6 +69,12 @@ declare global {
 const skillDbName = "agent-skills-ts-sdk-playground";
 const skillDbVersion = 1;
 const skillsStoreName = "skills";
+const sdkCapabilities = [
+  "Parse SKILL.md",
+  "Validate spec",
+  "Generate agent context",
+  "Read on demand",
+];
 
 const defaultSkill: SkillFormData = {
   allowedTools: "Read Grep Bash(pnpm:*)",
@@ -170,7 +176,7 @@ function App() {
               agent-skills-ts-sdk
             </p>
             <h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl">
-              Runtime skill demo
+              AgentSkills TypeScript SDK
             </h1>
           </div>
           <div className="hidden min-w-0 items-center gap-2 lg:flex" aria-label="Current status">
@@ -219,7 +225,7 @@ function App() {
             </button>
           </div>
         </div>
-        <div className="border-t px-4 py-2 sm:px-6">
+        <div className="flex items-center justify-between gap-4 border-t px-4 py-2 sm:px-6">
           <div className="inline-flex rounded-md border bg-muted p-1" aria-label="Skill view">
             <button
               className={previewButtonClass(viewMode === "reader")}
@@ -245,6 +251,16 @@ function App() {
               <Code2 size={15} />
               Raw
             </button>
+          </div>
+          <div className="hidden min-w-0 items-center gap-2 xl:flex" aria-label="SDK capabilities">
+            {sdkCapabilities.map((capability) => (
+              <span
+                className="rounded-md border bg-background px-2.5 py-1 font-mono text-xs text-muted-foreground"
+                key={capability}
+              >
+                {capability}
+              </span>
+            ))}
           </div>
         </div>
       </header>
@@ -863,6 +879,8 @@ function SkillReader({
           </p>
         </div>
         <dl className="grid gap-x-5 gap-y-2 text-sm sm:grid-cols-[120px_minmax(0,1fr)]">
+          <dt className="font-medium text-muted-foreground">SDK</dt>
+          <dd>Parsed, validated, prompt-ready</dd>
           <dt className="font-medium text-muted-foreground">Source</dt>
           <dd>IndexedDB</dd>
           <dt className="font-medium text-muted-foreground">Tokens</dt>
@@ -919,6 +937,8 @@ function AgentContextView({
       <div className="border-b pb-5">
         <h2 className="text-2xl font-semibold tracking-tight">Agent context</h2>
         <dl className="mt-4 grid gap-x-5 gap-y-2 text-sm sm:grid-cols-[150px_minmax(0,1fr)]">
+          <dt className="font-medium text-muted-foreground">Package flow</dt>
+          <dd>parse, validate, prompt, disclose</dd>
           <dt className="font-medium text-muted-foreground">Parsed name</dt>
           <dd>
             <code className="rounded bg-muted px-1 py-0.5">{context.properties.name}</code>
