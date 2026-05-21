@@ -13,6 +13,7 @@ import "@copilotkit/react-core/v2/styles.css";
 import {
   StrictMode,
   useCallback,
+  useEffect,
   useMemo,
   useState,
   type ChangeEvent,
@@ -50,11 +51,7 @@ type SavedSkill = {
 type ViewMode = "editor" | "raw" | "rich";
 
 type SkillAgentSnapshot = {
-  allowedTools: string;
   name: string;
-  parseError?: string;
-  tokens: number;
-  validationErrors: string[];
 };
 
 const MAX_SKILL_NAME_LENGTH = 64;
@@ -105,16 +102,28 @@ function App() {
   const hasChanges = content !== savedContent;
   const isValid = parsed.ok && validationErrors.length === 0;
   const skillAgent = useMemo(
-    () =>
-      new BrowserSkillAgent(() => ({
-        allowedTools: formData.allowedTools,
-        name: formData.name,
-        parseError: parsed.ok ? undefined : parsed.error,
-        tokens: tokenEstimate,
-        validationErrors,
-      })),
-    [formData.allowedTools, formData.name, parsed, tokenEstimate, validationErrors],
+    () => new BrowserSkillAgent(() => ({ name: formData.name })),
+    [formData.name],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const seedDefaultSkill = async () => {
+      const existing = await getSavedSkill(defaultSkill.name);
+      if (!existing && !cancelled) {
+        await putSavedSkill(
+          createSavedSkillRecord(assembleSkillContent(defaultSkill), defaultSkill),
+        );
+      }
+    };
+
+    void seedDefaultSkill();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const resetSkill = useCallback(() => {
     setFormData(defaultSkill);
@@ -617,134 +626,171 @@ class BrowserSkillAgent extends AbstractAgent {
       const readSkillToolCallId = `read_skill_${now}`;
       const validateSkillToolCallId = `validate_skill_${now}`;
       const discloseWorkflowToolCallId = `disclose_workflow_${now}`;
+      let cancelled = false;
       const readSkillArgs = JSON.stringify({
-        location: "playground/SKILL.md",
-        name: snapshot.name,
-      });
-      const readSkillResult = JSON.stringify({
-        allowedTools: snapshot.allowedTools || null,
-        name: snapshot.name,
-        tokens: snapshot.tokens,
+        id: snapshot.name,
+        store: skillsStoreName,
       });
       const validateSkillArgs = JSON.stringify({
         checks: ["frontmatter", "description", "body", "token-estimate"],
-        name: snapshot.name,
+        id: snapshot.name,
+        store: skillsStoreName,
       });
-      const validateSkillResult = JSON.stringify(
-        snapshot.parseError || snapshot.validationErrors.length > 0
-          ? {
-              errors: [snapshot.parseError, ...snapshot.validationErrors].filter(Boolean),
-              name: snapshot.name,
-              ok: false,
-            }
-          : {
-              allowedTools: snapshot.allowedTools || null,
-              name: snapshot.name,
-              ok: true,
-              tokens: snapshot.tokens,
-            },
-      );
       const discloseWorkflowArgs = JSON.stringify({
         mode: "progressive_disclosure",
         name: snapshot.name,
       });
-      const discloseWorkflowResult = JSON.stringify({
-        steps: [
-          "load only the skill metadata",
-          "validate before relying on the instructions",
-          "open the workflow details when the task matches",
-          "apply the skill to the user request",
-        ],
-      });
-      const allowedToolsLabel = snapshot.allowedTools.replaceAll("*", "all") || "none";
-      const response = [
-        snapshot.parseError || snapshot.validationErrors.length > 0
-          ? `The current skill is not ready to use.`
-          : `I loaded \`${snapshot.name}\` and would activate it for this task.`,
-        "",
-        `Allowed tools: ${allowedToolsLabel}.`,
-        `Token estimate: ${snapshot.tokens}.`,
-      ].join("\n");
 
-      const events: BaseEvent[] = [
-        { type: EventType.RUN_STARTED },
-        {
-          delta: "I’ll inspect the skill metadata first.",
-          messageId,
-          type: EventType.TEXT_MESSAGE_CHUNK,
-        },
-        {
-          delta: readSkillArgs,
-          parentMessageId: messageId,
-          toolCallId: readSkillToolCallId,
-          toolCallName: "read_skill",
-          type: EventType.TOOL_CALL_CHUNK,
-        },
-        {
-          content: readSkillResult,
-          messageId: `${messageId}_read_skill_result`,
-          toolCallId: readSkillToolCallId,
-          type: EventType.TOOL_CALL_RESULT,
-        },
-        {
-          delta: "\n\nNow I’ll validate it before using the instructions.",
-          messageId,
-          type: EventType.TEXT_MESSAGE_CHUNK,
-        },
-        {
-          delta: validateSkillArgs,
-          parentMessageId: messageId,
-          toolCallId: validateSkillToolCallId,
-          toolCallName: "validate_skill",
-          type: EventType.TOOL_CALL_CHUNK,
-        },
-        {
-          content: validateSkillResult,
-          messageId: `${messageId}_validate_skill_result`,
-          toolCallId: validateSkillToolCallId,
-          type: EventType.TOOL_CALL_RESULT,
-        },
-        {
-          delta: "\n\nThe task matches, so I’ll disclose the workflow.",
-          messageId,
-          type: EventType.TEXT_MESSAGE_CHUNK,
-        },
-        {
-          delta: discloseWorkflowArgs,
-          parentMessageId: messageId,
-          toolCallId: discloseWorkflowToolCallId,
-          toolCallName: "disclose_skill_workflow",
-          type: EventType.TOOL_CALL_CHUNK,
-        },
-        {
-          content: discloseWorkflowResult,
-          messageId: `${messageId}_disclose_workflow_result`,
-          toolCallId: discloseWorkflowToolCallId,
-          type: EventType.TOOL_CALL_RESULT,
-        },
-        {
-          delta: `\n\n${response}`,
-          messageId,
-          type: EventType.TEXT_MESSAGE_CHUNK,
-        },
-        { type: EventType.RUN_FINISHED },
-      ] as BaseEvent[];
+      const runFromIndexedDb = async () => {
+        const savedSkill = await getSavedSkill(snapshot.name);
+        const parsedSavedSkill = savedSkill ? parseContent(savedSkill.content) : null;
+        const savedValidationErrors = savedSkill ? validateSkillContent(savedSkill.content) : [];
+        const savedProperties = parsedSavedSkill?.ok ? parsedSavedSkill.properties : null;
+        const savedParseError =
+          parsedSavedSkill && !parsedSavedSkill.ok ? parsedSavedSkill.error : null;
+        const loadedName = savedProperties?.name ?? snapshot.name;
+        const loadedAllowedTools = savedProperties?.allowedTools ?? "";
+        const loadedTokens = savedSkill?.tokens ?? 0;
+        const hasSavedErrors = Boolean(savedParseError) || savedValidationErrors.length > 0;
+        const readSkillResult = JSON.stringify(
+          savedSkill
+            ? {
+                id: savedSkill.id,
+                name: loadedName,
+                source: "indexeddb",
+                tokens: loadedTokens,
+                updatedAt: savedSkill.updatedAt,
+              }
+            : {
+                id: snapshot.name,
+                missing: true,
+                source: "indexeddb",
+              },
+        );
+        const validateSkillResult = JSON.stringify(
+          !savedSkill || hasSavedErrors
+            ? {
+                errors: [
+                  !savedSkill ? "Skill is not saved in IndexedDB." : null,
+                  savedParseError,
+                  ...savedValidationErrors,
+                ].filter(Boolean),
+                name: loadedName,
+                ok: false,
+                source: "indexeddb",
+              }
+            : {
+                allowedTools: loadedAllowedTools || null,
+                name: loadedName,
+                ok: true,
+                source: "indexeddb",
+                tokens: loadedTokens,
+              },
+        );
+        const discloseWorkflowResult = JSON.stringify({
+          source: "indexeddb",
+          steps: [
+            "load saved skill metadata",
+            "validate the saved SKILL.md",
+            "open workflow details only after the task matches",
+            "apply the skill to the user request",
+          ],
+        });
+        const allowedToolsLabel = loadedAllowedTools.replaceAll("*", "all") || "none";
+        const response = [
+          !savedSkill || hasSavedErrors
+            ? `I can’t use \`${loadedName}\` until the IndexedDB copy is saved and valid.`
+            : `I loaded \`${loadedName}\` from IndexedDB and would activate it for this task.`,
+          "",
+          `Allowed tools: ${allowedToolsLabel}.`,
+          `Token estimate: ${loadedTokens}.`,
+        ].join("\n");
 
-      let index = 0;
-      const emitNext = () => {
-        const event = events[index];
-        if (!event) {
-          observer.complete();
-          return;
-        }
-        observer.next(event);
-        index += 1;
-        window.setTimeout(emitNext, index < events.length - 1 ? 180 : 24);
+        return [
+          { type: EventType.RUN_STARTED },
+          {
+            delta: "I’ll inspect the saved IndexedDB skill first.",
+            messageId,
+            type: EventType.TEXT_MESSAGE_CHUNK,
+          },
+          {
+            delta: readSkillArgs,
+            parentMessageId: messageId,
+            toolCallId: readSkillToolCallId,
+            toolCallName: "read_skill",
+            type: EventType.TOOL_CALL_CHUNK,
+          },
+          {
+            content: readSkillResult,
+            messageId: `${messageId}_read_skill_result`,
+            toolCallId: readSkillToolCallId,
+            type: EventType.TOOL_CALL_RESULT,
+          },
+          {
+            delta: "\n\nNow I’ll validate that saved copy before using the instructions.",
+            messageId,
+            type: EventType.TEXT_MESSAGE_CHUNK,
+          },
+          {
+            delta: validateSkillArgs,
+            parentMessageId: messageId,
+            toolCallId: validateSkillToolCallId,
+            toolCallName: "validate_skill",
+            type: EventType.TOOL_CALL_CHUNK,
+          },
+          {
+            content: validateSkillResult,
+            messageId: `${messageId}_validate_skill_result`,
+            toolCallId: validateSkillToolCallId,
+            type: EventType.TOOL_CALL_RESULT,
+          },
+          {
+            delta: "\n\nThe task matches, so I’ll disclose the saved workflow.",
+            messageId,
+            type: EventType.TEXT_MESSAGE_CHUNK,
+          },
+          {
+            delta: discloseWorkflowArgs,
+            parentMessageId: messageId,
+            toolCallId: discloseWorkflowToolCallId,
+            toolCallName: "disclose_skill_workflow",
+            type: EventType.TOOL_CALL_CHUNK,
+          },
+          {
+            content: discloseWorkflowResult,
+            messageId: `${messageId}_disclose_workflow_result`,
+            toolCallId: discloseWorkflowToolCallId,
+            type: EventType.TOOL_CALL_RESULT,
+          },
+          {
+            delta: `\n\n${response}`,
+            messageId,
+            type: EventType.TEXT_MESSAGE_CHUNK,
+          },
+          { type: EventType.RUN_FINISHED },
+        ] as BaseEvent[];
       };
 
-      emitNext();
+      void runFromIndexedDb().then((events) => {
+        let index = 0;
+        const emitNext = () => {
+          if (cancelled) return;
+
+          const event = events[index];
+          if (!event) {
+            observer.complete();
+            return;
+          }
+          observer.next(event);
+          index += 1;
+          window.setTimeout(emitNext, index < events.length - 1 ? 180 : 24);
+        };
+
+        emitNext();
+      });
 
       return () => {
+        cancelled = true;
         observer.complete();
       };
     });
@@ -986,6 +1032,19 @@ async function putSavedSkill(skill: SavedSkill): Promise<void> {
       .objectStore(skillsStoreName)
       .put(skill);
     request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function getSavedSkill(id: string): Promise<SavedSkill | null> {
+  const db = await openSkillDb();
+
+  return new Promise((resolve, reject) => {
+    const request = db
+      .transaction(skillsStoreName, "readonly")
+      .objectStore(skillsStoreName)
+      .get(id);
+    request.onsuccess = () => resolve((request.result as SavedSkill | undefined) ?? null);
     request.onerror = () => reject(request.error);
   });
 }
