@@ -267,15 +267,20 @@ function App() {
   }, [content, formData, promptPreview, validateInBrowser]);
 
   return (
-    <main className="app-shell">
-      <section className="app-grid" aria-label="Skill editor and agent mock">
-        <section className="editor-column" aria-label="Skill editor">
-          <header className="compact-header">
-            <div>
-              <p className="eyebrow">agent-skills-ts-sdk</p>
-              <h1>Skill editor</h1>
+    <main className="min-h-dvh bg-background p-4 text-foreground sm:p-6">
+      <section
+        className="mx-auto grid w-full max-w-7xl gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(380px,0.8fr)]"
+        aria-label="Skill editor and agent mock"
+      >
+        <section className="min-w-0 space-y-4" aria-label="Skill editor">
+          <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <p className="font-mono text-xs font-semibold text-muted-foreground">
+                agent-skills-ts-sdk
+              </p>
+              <h1 className="text-2xl font-bold tracking-tight">Skill editor</h1>
             </div>
-            <div className="status-strip" aria-label="Current validation status">
+            <div className="flex flex-wrap gap-2" aria-label="Current validation status">
               <StatusPill tone={isValid ? "success" : "error"}>
                 {isValid ? "Valid" : "Needs work"}
               </StatusPill>
@@ -286,45 +291,78 @@ function App() {
             </div>
           </header>
 
-          <section className="editor-surface">
-            <div className="editor-toolbar" aria-label="Editor actions">
-              <button type="button" onClick={resetSkill} title="Reset skill">
+          <section className="min-w-0 rounded-lg border bg-card p-4 shadow-sm">
+            <div className="mb-4 flex flex-wrap gap-2" aria-label="Editor actions">
+              <button
+                className="inline-flex h-9 items-center gap-2 rounded-md border bg-card px-3 text-sm font-medium transition-colors hover:bg-muted/50"
+                type="button"
+                onClick={resetSkill}
+                title="Reset skill"
+              >
                 <RefreshCcw size={16} />
                 Reset
               </button>
-              <button type="button" onClick={() => void loadExample(examples[0].id)}>
+              <button
+                className="inline-flex h-9 items-center gap-2 rounded-md border bg-card px-3 text-sm font-medium transition-colors hover:bg-muted/50"
+                type="button"
+                onClick={() => void loadExample(examples[0].id)}
+              >
                 <WandSparkles size={16} />
                 README skill
               </button>
-              <button type="button" onClick={() => void loadExample(examples[1].id)}>
+              <button
+                className="inline-flex h-9 items-center gap-2 rounded-md border bg-card px-3 text-sm font-medium transition-colors hover:bg-muted/50"
+                type="button"
+                onClick={() => void loadExample(examples[1].id)}
+              >
                 <WandSparkles size={16} />
                 Worker skill
               </button>
             </div>
 
-            <div className="form-grid simple-form">
+            <div className="grid min-w-0 gap-4 sm:grid-cols-2">
               <Field label="Name" detail={`${formData.name.length}/64`}>
-                <input value={formData.name} onChange={updateField("name")} spellCheck={false} />
+                <input
+                  className="h-10 w-full min-w-0 rounded-md border bg-background px-3 text-sm outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20"
+                  data-mono="true"
+                  value={formData.name}
+                  onChange={updateField("name")}
+                  spellCheck={false}
+                />
               </Field>
               <Field label="License">
-                <input value={formData.license} onChange={updateField("license")} />
+                <input
+                  className="h-10 w-full min-w-0 rounded-md border bg-background px-3 text-sm outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20"
+                  value={formData.license}
+                  onChange={updateField("license")}
+                />
               </Field>
               <Field label="Description" detail={`${formData.description.length}/1024`} wide>
                 <textarea
-                  className="short-textarea"
+                  className="min-h-20 w-full min-w-0 resize-none rounded-md border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20"
                   value={formData.description}
                   onChange={updateField("description")}
                 />
               </Field>
               <Field label="Compatibility" detail={`${formData.compatibility.length}/500`} wide>
-                <input value={formData.compatibility} onChange={updateField("compatibility")} />
+                <input
+                  className="h-10 w-full min-w-0 rounded-md border bg-background px-3 text-sm outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20"
+                  value={formData.compatibility}
+                  onChange={updateField("compatibility")}
+                />
               </Field>
               <Field label="Allowed tools" wide>
-                <input value={formData.allowedTools} onChange={updateField("allowedTools")} />
+                <input
+                  className="h-10 w-full min-w-0 rounded-md border bg-background px-3 text-sm outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20"
+                  data-mono="true"
+                  value={formData.allowedTools}
+                  onChange={updateField("allowedTools")}
+                />
               </Field>
               <Field label="Instructions" wide>
                 <textarea
-                  className="body-editor"
+                  className="min-h-[240px] w-full min-w-0 resize-y rounded-md border bg-background px-3 py-2 font-mono text-sm leading-6 outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20"
+                  data-mono="true"
                   value={formData.body}
                   onChange={updateField("body")}
                   spellCheck={false}
@@ -333,14 +371,17 @@ function App() {
             </div>
           </section>
 
-          <section className="editor-surface storage-surface" aria-label="IndexedDB storage">
-            <div className="section-heading compact-line">
-              <h2>
-                <Database size={16} />
+          <section
+            className="min-w-0 rounded-lg border bg-card p-4 shadow-sm"
+            aria-label="IndexedDB storage"
+          >
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="flex items-center gap-2 text-sm font-semibold">
+                <Database className="size-4 text-muted-foreground" />
                 IndexedDB
               </h2>
               <button
-                className="primary-button compact-primary"
+                className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                 type="button"
                 onClick={() => void saveSnapshot()}
               >
@@ -348,22 +389,34 @@ function App() {
                 Save
               </button>
             </div>
-            {storageMessage ? <p className="storage-message">{storageMessage}</p> : null}
-            <div className="saved-list compact-saved-list">
+            {storageMessage ? (
+              <p className="mb-3 rounded-md border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+                {storageMessage}
+              </p>
+            ) : null}
+            <div className="grid max-h-36 gap-2 overflow-auto">
               {savedSkills.length === 0 ? (
-                <p className="empty-state">No saved skills yet.</p>
+                <p className="text-sm text-muted-foreground">No saved skills yet.</p>
               ) : (
                 savedSkills.map((skill) => (
-                  <div className="saved-row" key={skill.id}>
-                    <button type="button" onClick={() => void loadSavedSkill(skill)}>
-                      <span>
-                        <strong>{skill.name}</strong>
-                        <small>{new Date(skill.updatedAt).toLocaleString()}</small>
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2" key={skill.id}>
+                    <button
+                      className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md border bg-card px-3 py-2 text-left transition-colors hover:bg-muted/50"
+                      type="button"
+                      onClick={() => void loadSavedSkill(skill)}
+                    >
+                      <span className="grid min-w-0 gap-0.5">
+                        <strong className="truncate text-sm font-medium">{skill.name}</strong>
+                        <small className="truncate text-xs text-muted-foreground">
+                          {new Date(skill.updatedAt).toLocaleString()}
+                        </small>
                       </span>
-                      <code>{skill.tokens}</code>
+                      <code className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                        {skill.tokens}
+                      </code>
                     </button>
                     <button
-                      className="icon-button"
+                      className="inline-flex size-9 items-center justify-center rounded-md border bg-card text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
                       type="button"
                       onClick={() => void deleteSavedSkill(skill)}
                       title={`Delete ${skill.name}`}
@@ -376,13 +429,19 @@ function App() {
             </div>
           </section>
 
-          <section className="editor-surface markdown-surface" aria-label="SKILL.md preview">
-            <div className="section-heading compact-line">
-              <h2>SKILL.md</h2>
-              <div className="button-row">
-                <div className="segmented-control" aria-label="SKILL.md preview mode">
+          <section
+            className="min-w-0 rounded-lg border bg-card p-4 shadow-sm"
+            aria-label="SKILL.md preview"
+          >
+            <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="text-sm font-semibold">SKILL.md</h2>
+              <div className="flex flex-wrap gap-2">
+                <div
+                  className="inline-flex rounded-md border bg-muted p-1"
+                  aria-label="SKILL.md preview mode"
+                >
                   <button
-                    className={skillPreviewMode === "raw" ? "active" : ""}
+                    className={previewButtonClass(skillPreviewMode === "raw")}
                     type="button"
                     onClick={() => setSkillPreviewMode("raw")}
                   >
@@ -390,7 +449,7 @@ function App() {
                     Raw
                   </button>
                   <button
-                    className={skillPreviewMode === "visual" ? "active" : ""}
+                    className={previewButtonClass(skillPreviewMode === "visual")}
                     type="button"
                     onClick={() => setSkillPreviewMode("visual")}
                   >
@@ -399,7 +458,7 @@ function App() {
                   </button>
                 </div>
                 <button
-                  className="icon-label-button"
+                  className="inline-flex h-9 items-center gap-2 rounded-md border bg-card px-3 text-sm font-medium transition-colors hover:bg-muted/50"
                   type="button"
                   onClick={() => void copySkill()}
                 >
@@ -409,46 +468,71 @@ function App() {
               </div>
             </div>
             {skillPreviewMode === "raw" ? (
-              <pre className="skill-source">{content}</pre>
+              <pre className="max-h-[420px] overflow-auto rounded-md bg-foreground p-4 text-xs leading-5 text-background">
+                {content}
+              </pre>
             ) : (
               <SkillVisual parsed={parsed} validationErrors={validationErrors} />
             )}
           </section>
         </section>
 
-        <section className="agent-column" aria-label="CopilotKit mock agent">
-          <header className="agent-header">
-            <div>
-              <p className="eyebrow">CopilotKit UI mock</p>
-              <h1>Agent run</h1>
+        <section
+          className="flex min-h-[680px] min-w-0 flex-col overflow-hidden rounded-lg border bg-card p-4 shadow-sm lg:sticky lg:top-6 lg:max-h-[calc(100dvh-3rem)]"
+          aria-label="CopilotKit mock agent"
+        >
+          <header className="mb-4 flex items-center justify-between gap-3">
+            <div className="space-y-1">
+              <p className="font-mono text-xs font-semibold text-muted-foreground">
+                CopilotKit UI mock
+              </p>
+              <h1 className="text-2xl font-bold tracking-tight">Agent run</h1>
             </div>
-            <button className="primary-button run-button" type="button" onClick={runMockAgent}>
+            <button
+              className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              type="button"
+              onClick={runMockAgent}
+            >
               <Play size={16} />
               Run with skill
             </button>
           </header>
 
-          <section className="agent-status" aria-label="Browser validation result">
-            {isValid ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
-            <div>
-              <strong>
+          <section
+            className="mb-4 flex items-start gap-3 rounded-lg border bg-muted/50 p-3"
+            aria-label="Browser validation result"
+          >
+            {isValid ? (
+              <CheckCircle2 className="mt-0.5 size-4 text-success" />
+            ) : (
+              <AlertCircle className="mt-0.5 size-4 text-destructive" />
+            )}
+            <div className="min-w-0 space-y-0.5">
+              <strong className="text-sm font-medium">
                 {isValid
                   ? "Browser validation ready"
                   : "Fix validation before relying on this skill"}
               </strong>
-              <span>
+              <p className="text-sm text-muted-foreground">
                 {browserResult
                   ? `${browserResult.tokens ?? tokenEstimate} tokens checked in browser`
                   : "Run starts by validating the current SKILL.md locally."}
-              </span>
+              </p>
             </div>
           </section>
 
-          <div className="mock-chat agent-chat" aria-label="Mock CopilotKit chat transcript">
+          <div
+            className="grid min-h-0 flex-1 content-start gap-3 overflow-auto rounded-lg border bg-background p-4"
+            aria-label="Mock CopilotKit chat transcript"
+          >
             {mockMessages.map((message) => (
-              <div className={`mock-message ${message.role}`} key={message.id}>
-                <span>{message.role === "tool" ? "read_skill tool" : message.role}</span>
-                <Markdown content={message.content} />
+              <div className={mockMessageClass(message.role)} key={message.id}>
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {message.role === "tool" ? "read_skill tool" : message.role}
+                </span>
+                <div className="text-sm leading-6 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_pre]:overflow-auto [&_pre]:rounded-md [&_pre]:bg-muted/70 [&_pre]:p-3 [&_ul]:ml-5 [&_ul]:list-disc">
+                  <Markdown content={message.content} />
+                </div>
               </div>
             ))}
           </div>
@@ -470,10 +554,12 @@ function Field({
   wide?: boolean;
 }) {
   return (
-    <label className={wide ? "field wide" : "field"}>
-      <span>
+    <label className={wide ? "grid min-w-0 gap-2 sm:col-span-2" : "grid min-w-0 gap-2"}>
+      <span className="flex items-center justify-between gap-3 text-sm font-medium">
         {label}
-        {detail ? <small>{detail}</small> : null}
+        {detail ? (
+          <small className="font-mono text-xs text-muted-foreground tabular-nums">{detail}</small>
+        ) : null}
       </span>
       {children}
     </label>
@@ -487,7 +573,30 @@ function StatusPill({
   children: ReactNode;
   tone: "error" | "neutral" | "success" | "warn";
 }) {
-  return <span className={`status-pill ${tone}`}>{children}</span>;
+  return <span className={statusPillClass(tone)}>{children}</span>;
+}
+
+function statusPillClass(tone: "error" | "neutral" | "success" | "warn"): string {
+  const base =
+    "inline-flex h-7 items-center rounded-full border px-2.5 text-xs font-semibold tabular-nums";
+  if (tone === "success") return `${base} border-success/30 bg-success/10 text-success`;
+  if (tone === "error") return `${base} border-destructive/30 bg-destructive/10 text-destructive`;
+  if (tone === "warn") return `${base} border-warning/40 bg-warning/10 text-warning-foreground`;
+  return `${base} bg-card text-muted-foreground`;
+}
+
+function previewButtonClass(active: boolean): string {
+  return [
+    "inline-flex h-7 items-center gap-1.5 rounded px-2 text-xs font-medium transition-colors",
+    active ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+  ].join(" ");
+}
+
+function mockMessageClass(role: MockChatMessage["role"]): string {
+  const base = "grid gap-2 rounded-lg border p-3";
+  if (role === "user") return `${base} ml-auto max-w-[85%] bg-secondary text-secondary-foreground`;
+  if (role === "tool") return `${base} bg-muted/50`;
+  return `${base} max-w-[92%] bg-card`;
 }
 
 function SkillVisual({
@@ -499,9 +608,9 @@ function SkillVisual({
 }) {
   if (!parsed.ok) {
     return (
-      <div className="markdown-preview invalid">
-        <strong>Unable to render SKILL.md</strong>
-        <p>{parsed.error}</p>
+      <div className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-destructive">
+        <strong className="text-sm font-medium">Unable to render SKILL.md</strong>
+        <p className="mt-1 text-sm">{parsed.error}</p>
       </div>
     );
   }
@@ -509,22 +618,22 @@ function SkillVisual({
   const properties = parsed.properties;
 
   return (
-    <div className="markdown-preview">
-      <div className="visual-metadata">
-        <span>Name</span>
-        <strong>{properties.name}</strong>
-        <span>Description</span>
-        <p>{properties.description}</p>
+    <div className="grid max-h-[420px] gap-4 overflow-auto rounded-md border bg-background p-4">
+      <div className="grid gap-x-4 gap-y-2 rounded-md border bg-card p-3 text-sm sm:grid-cols-[120px_minmax(0,1fr)]">
+        <span className="font-medium text-muted-foreground">Name</span>
+        <strong className="min-w-0">{properties.name}</strong>
+        <span className="font-medium text-muted-foreground">Description</span>
+        <p className="min-w-0">{properties.description}</p>
         {properties.compatibility ? (
           <>
-            <span>Compatibility</span>
-            <p>{properties.compatibility}</p>
+            <span className="font-medium text-muted-foreground">Compatibility</span>
+            <p className="min-w-0">{properties.compatibility}</p>
           </>
         ) : null}
         {properties.allowedTools ? (
           <>
-            <span>Allowed tools</span>
-            <code>{properties.allowedTools}</code>
+            <span className="font-medium text-muted-foreground">Allowed tools</span>
+            <code className="min-w-0 rounded bg-muted px-1 py-0.5">{properties.allowedTools}</code>
           </>
         ) : null}
       </div>
@@ -540,15 +649,19 @@ function MarkdownBody({ markdown }: { markdown: string }) {
   const blocks = parseMarkdownBlocks(markdown);
 
   return (
-    <div className="markdown-body">
+    <div className="grid gap-3 text-sm leading-6">
       {blocks.map((block, index) => {
         if (block.kind === "heading") {
           const HeadingTag = `h${Math.min(block.level, 3)}` as "h1" | "h2" | "h3";
-          return <HeadingTag key={`${block.kind}-${index}`}>{block.text}</HeadingTag>;
+          return (
+            <HeadingTag className="font-semibold tracking-tight" key={`${block.kind}-${index}`}>
+              {block.text}
+            </HeadingTag>
+          );
         }
         if (block.kind === "list") {
           return (
-            <ul key={`${block.kind}-${index}`}>
+            <ul className="ml-5 list-disc" key={`${block.kind}-${index}`}>
               {block.items.map((item) => (
                 <li key={item}>{item}</li>
               ))}
@@ -556,7 +669,14 @@ function MarkdownBody({ markdown }: { markdown: string }) {
           );
         }
         if (block.kind === "code") {
-          return <pre key={`${block.kind}-${index}`}>{block.text}</pre>;
+          return (
+            <pre
+              className="overflow-auto rounded-md bg-muted p-3 text-xs"
+              key={`${block.kind}-${index}`}
+            >
+              {block.text}
+            </pre>
+          );
         }
         return <p key={`${block.kind}-${index}`}>{block.text}</p>;
       })}
@@ -568,11 +688,15 @@ function ValidationList({ errors, parseError }: { errors: string[]; parseError: 
   const allErrors = [...(parseError ? [parseError] : []), ...errors];
 
   if (allErrors.length === 0) {
-    return <p className="valid-message">No validation errors.</p>;
+    return (
+      <p className="rounded-md border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
+        No validation errors.
+      </p>
+    );
   }
 
   return (
-    <ul className="validation-list">
+    <ul className="grid gap-1 rounded-md border border-destructive/30 bg-destructive/10 px-5 py-3 text-sm text-destructive">
       {allErrors.map((error) => (
         <li key={error}>{error}</li>
       ))}
