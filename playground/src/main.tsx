@@ -1,13 +1,10 @@
 import {
   AlertCircle,
-  Bot,
-  Braces,
   Code2,
   CheckCircle2,
   Copy,
   Database,
   Eye,
-  FileText,
   Play,
   RefreshCcw,
   Save,
@@ -20,7 +17,6 @@ import "@copilotkit/react-ui/styles.css";
 import { StrictMode, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import {
-  createSkillPatch,
   estimateTokens,
   parseSkillContent,
   toPrompt,
@@ -168,7 +164,7 @@ function App() {
   const [mockMessages, setMockMessages] = useState<MockChatMessage[]>(() =>
     createInitialMockMessages(defaultSkill),
   );
-  const [copied, setCopied] = useState<"content" | "prompt" | "patch" | null>(null);
+  const [copied, setCopied] = useState<"content" | null>(null);
 
   const content = useMemo(() => assembleSkillContent(formData), [formData]);
   const parsed = useMemo(() => parseContent(content), [content]);
@@ -177,12 +173,9 @@ function App() {
     if (!parsed.ok) return "";
     return toPrompt([{ content, location: "playground/SKILL.md" }]);
   }, [content, parsed.ok]);
-  const patch = useMemo(
-    () => createSkillPatch(savedContent, content, { contextLines: 2 }),
-    [content, savedContent],
-  );
   const tokenEstimate = useMemo(() => estimateTokens(content), [content]);
   const hasChanges = content !== savedContent;
+  const isValid = parsed.ok && validationErrors.length === 0;
 
   useEffect(() => {
     void refreshSavedSkills(setSavedSkills);
@@ -192,6 +185,7 @@ function App() {
     (field: keyof SkillFormData) =>
       (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         setFormData((current) => ({ ...current, [field]: event.target.value }));
+        setBrowserResult(null);
       },
     [],
   );
@@ -203,12 +197,21 @@ function App() {
       setFormData(next);
       setSavedContent(example.content);
       setBrowserResult(null);
+      setStorageMessage(`Loaded ${next.name} sample`);
       setMockMessages(createInitialMockMessages(next));
     }
   }, []);
 
+  const resetSkill = useCallback(() => {
+    setFormData(defaultSkill);
+    setSavedContent(assembleSkillContent(defaultSkill));
+    setBrowserResult(null);
+    setStorageMessage(null);
+    setMockMessages(createInitialMockMessages(defaultSkill));
+  }, []);
+
   const validateInBrowser = useCallback(() => {
-    setBrowserResult({
+    const result = {
       bodyLength: parsed.ok ? parsed.body.length : undefined,
       error: parsed.ok ? undefined : parsed.error,
       ok: parsed.ok && validationErrors.length === 0,
@@ -216,7 +219,9 @@ function App() {
       properties: parsed.ok ? parsed.properties : undefined,
       tokens: tokenEstimate,
       validationErrors,
-    });
+    } satisfies BrowserValidationResult;
+    setBrowserResult(result);
+    return result;
   }, [parsed, promptPreview, tokenEstimate, validationErrors]);
 
   const saveSnapshot = useCallback(async () => {
@@ -242,53 +247,62 @@ function App() {
     setStorageMessage(`Deleted ${skill.name} from IndexedDB`);
   }, []);
 
-  const copyText = useCallback(async (kind: "content" | "prompt" | "patch", value: string) => {
-    await navigator.clipboard.writeText(value);
-    setCopied(kind);
+  const copySkill = useCallback(async () => {
+    await navigator.clipboard.writeText(content);
+    setCopied("content");
     window.setTimeout(() => setCopied(null), 1200);
-  }, []);
+  }, [content]);
 
   const runMockAgent = useCallback(() => {
-    setMockMessages(createMockAgentMessages(formData, content, promptPreview, validationErrors));
-  }, [content, formData, promptPreview, validationErrors]);
+    const result = validateInBrowser();
+    setMockMessages(
+      createMockAgentMessages(
+        formData,
+        content,
+        promptPreview,
+        result.validationErrors,
+        result.error,
+      ),
+    );
+  }, [content, formData, promptPreview, validateInBrowser]);
 
   return (
-    <main className="shell">
-      <section className="workspace" aria-label="Skill editor workspace">
-        <header className="topbar">
-          <div>
-            <p className="eyebrow">agent-skills-ts-sdk</p>
-            <h1>SKILL.md editor</h1>
-          </div>
-          <div className="status-strip" aria-label="Current validation status">
-            <StatusPill tone={validationErrors.length === 0 && parsed.ok ? "success" : "error"}>
-              {validationErrors.length === 0 && parsed.ok ? "Valid" : "Needs work"}
-            </StatusPill>
-            <StatusPill tone="neutral">{tokenEstimate} tokens</StatusPill>
-            <StatusPill tone={hasChanges ? "warn" : "neutral"}>
-              {hasChanges ? "Unsaved draft" : "Snapshot saved"}
-            </StatusPill>
-          </div>
-        </header>
+    <main className="app-shell">
+      <section className="app-grid" aria-label="Skill editor and agent mock">
+        <section className="editor-column" aria-label="Skill editor">
+          <header className="compact-header">
+            <div>
+              <p className="eyebrow">agent-skills-ts-sdk</p>
+              <h1>Skill editor</h1>
+            </div>
+            <div className="status-strip" aria-label="Current validation status">
+              <StatusPill tone={isValid ? "success" : "error"}>
+                {isValid ? "Valid" : "Needs work"}
+              </StatusPill>
+              <StatusPill tone="neutral">{tokenEstimate} tokens</StatusPill>
+              <StatusPill tone={hasChanges ? "warn" : "neutral"}>
+                {hasChanges ? "Unsaved" : "Saved"}
+              </StatusPill>
+            </div>
+          </header>
 
-        <section className="editor-grid">
-          <section className="panel editor-panel" aria-label="Editor">
-            <div className="panel-heading">
-              <div>
-                <h2>Skill metadata</h2>
-                <p>Required fields plus optional compatibility and tool hints.</p>
-              </div>
-              <button
-                className="icon-button"
-                type="button"
-                onClick={() => setFormData(defaultSkill)}
-                title="Reset"
-              >
+          <section className="editor-surface">
+            <div className="editor-toolbar" aria-label="Editor actions">
+              <button type="button" onClick={resetSkill} title="Reset skill">
                 <RefreshCcw size={16} />
+                Reset
+              </button>
+              <button type="button" onClick={() => void loadExample(examples[0].id)}>
+                <WandSparkles size={16} />
+                README skill
+              </button>
+              <button type="button" onClick={() => void loadExample(examples[1].id)}>
+                <WandSparkles size={16} />
+                Worker skill
               </button>
             </div>
 
-            <div className="form-grid">
+            <div className="form-grid simple-form">
               <Field label="Name" detail={`${formData.name.length}/64`}>
                 <input value={formData.name} onChange={updateField("name")} spellCheck={false} />
               </Field>
@@ -319,157 +333,125 @@ function App() {
             </div>
           </section>
 
-          <aside className="side-stack" aria-label="Examples and validation">
-            <section className="panel">
-              <div className="panel-heading">
-                <div>
-                  <h2>Browser examples</h2>
-                  <p>Sample skills are bundled with the browser playground.</p>
-                </div>
-                <WandSparkles size={18} />
-              </div>
-              <div className="example-list">
-                {examples.map((example) => (
-                  <button
-                    className="example-row"
-                    key={example.id}
-                    type="button"
-                    onClick={() => void loadExample(example.id)}
-                  >
-                    <span>
-                      <strong>{example.name}</strong>
-                      <small>{example.description}</small>
-                    </span>
-                    <code>{estimateTokens(example.content)}</code>
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            <section className="panel">
-              <div className="panel-heading">
-                <div>
-                  <h2>Validation</h2>
-                  <p>Runs entirely in the browser with the SDK.</p>
-                </div>
-                {validationErrors.length === 0 && parsed.ok ? (
-                  <CheckCircle2 className="success-icon" size={18} />
-                ) : (
-                  <AlertCircle className="error-icon" size={18} />
-                )}
-              </div>
-              <ValidationList
-                parseError={parsed.ok ? null : parsed.error}
-                errors={validationErrors}
-              />
-              <button className="primary-button" type="button" onClick={validateInBrowser}>
-                <Play size={16} />
-                Validate in browser
+          <section className="editor-surface storage-surface" aria-label="IndexedDB storage">
+            <div className="section-heading compact-line">
+              <h2>
+                <Database size={16} />
+                IndexedDB
+              </h2>
+              <button
+                className="primary-button compact-primary"
+                type="button"
+                onClick={() => void saveSnapshot()}
+              >
+                <Save size={16} />
+                Save
               </button>
-              {browserResult && (
-                <div className="browser-result">
-                  <strong>
-                    {browserResult.ok ? "Browser validation passed" : "Browser validation failed"}
-                  </strong>
-                  <span>
-                    {browserResult.validationErrors.length === 0 && !browserResult.error
-                      ? `${browserResult.tokens ?? 0} estimated tokens`
-                      : `${browserResult.validationErrors.length + (browserResult.error ? 1 : 0)} validation issue(s)`}
-                  </span>
-                </div>
-              )}
-            </section>
-
-            <section className="panel">
-              <div className="panel-heading">
-                <div>
-                  <h2>IndexedDB storage</h2>
-                  <p>Saved skills stay in this browser.</p>
-                </div>
-                <Database size={18} />
-              </div>
-              {storageMessage ? <p className="storage-message">{storageMessage}</p> : null}
-              <div className="saved-list">
-                {savedSkills.length === 0 ? (
-                  <p className="empty-state">No saved skills yet.</p>
-                ) : (
-                  savedSkills.map((skill) => (
-                    <div className="saved-row" key={skill.id}>
-                      <button type="button" onClick={() => void loadSavedSkill(skill)}>
-                        <span>
-                          <strong>{skill.name}</strong>
-                          <small>{new Date(skill.updatedAt).toLocaleString()}</small>
-                        </span>
-                        <code>{skill.tokens}</code>
-                      </button>
-                      <button
-                        className="icon-button"
-                        type="button"
-                        onClick={() => void deleteSavedSkill(skill)}
-                        title={`Delete ${skill.name}`}
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </section>
-
-            <section className="panel mock-agent-panel">
-              <div className="panel-heading">
-                <div>
-                  <h2>CopilotKit mock</h2>
-                  <p>Local agent UI simulation with no backend model call.</p>
-                </div>
-                <Bot size={18} />
-              </div>
-              <div className="mock-chat" aria-label="Mock CopilotKit chat transcript">
-                {mockMessages.map((message) => (
-                  <div className={`mock-message ${message.role}`} key={message.id}>
-                    <span>{message.role === "tool" ? "read_skill" : message.role}</span>
-                    <Markdown content={message.content} />
+            </div>
+            {storageMessage ? <p className="storage-message">{storageMessage}</p> : null}
+            <div className="saved-list compact-saved-list">
+              {savedSkills.length === 0 ? (
+                <p className="empty-state">No saved skills yet.</p>
+              ) : (
+                savedSkills.map((skill) => (
+                  <div className="saved-row" key={skill.id}>
+                    <button type="button" onClick={() => void loadSavedSkill(skill)}>
+                      <span>
+                        <strong>{skill.name}</strong>
+                        <small>{new Date(skill.updatedAt).toLocaleString()}</small>
+                      </span>
+                      <code>{skill.tokens}</code>
+                    </button>
+                    <button
+                      className="icon-button"
+                      type="button"
+                      onClick={() => void deleteSavedSkill(skill)}
+                      title={`Delete ${skill.name}`}
+                    >
+                      <Trash2 size={15} />
+                    </button>
                   </div>
-                ))}
+                ))
+              )}
+            </div>
+          </section>
+
+          <section className="editor-surface markdown-surface" aria-label="SKILL.md preview">
+            <div className="section-heading compact-line">
+              <h2>SKILL.md</h2>
+              <div className="button-row">
+                <div className="segmented-control" aria-label="SKILL.md preview mode">
+                  <button
+                    className={skillPreviewMode === "raw" ? "active" : ""}
+                    type="button"
+                    onClick={() => setSkillPreviewMode("raw")}
+                  >
+                    <Code2 size={15} />
+                    Raw
+                  </button>
+                  <button
+                    className={skillPreviewMode === "visual" ? "active" : ""}
+                    type="button"
+                    onClick={() => setSkillPreviewMode("visual")}
+                  >
+                    <Eye size={15} />
+                    Visual
+                  </button>
+                </div>
+                <button
+                  className="icon-label-button"
+                  type="button"
+                  onClick={() => void copySkill()}
+                >
+                  <Copy size={15} />
+                  {copied === "content" ? "Copied" : "Copy"}
+                </button>
               </div>
-              <button className="primary-button" type="button" onClick={runMockAgent}>
-                <Play size={16} />
-                Run mock agent
-              </button>
-            </section>
-          </aside>
+            </div>
+            {skillPreviewMode === "raw" ? (
+              <pre className="skill-source">{content}</pre>
+            ) : (
+              <SkillVisual parsed={parsed} validationErrors={validationErrors} />
+            )}
+          </section>
         </section>
 
-        <section className="preview-grid">
-          <SkillPreviewPanel
-            icon={<FileText size={16} />}
-            mode={skillPreviewMode}
-            parsed={parsed}
-            setMode={setSkillPreviewMode}
-            title="SKILL.md"
-            actionLabel={copied === "content" ? "Copied" : "Copy"}
-            onAction={() => void copyText("content", content)}
-            rawContent={content}
-            validationErrors={validationErrors}
-          />
-          <PreviewPanel
-            icon={<Braces size={16} />}
-            title="Prompt metadata"
-            actionLabel={copied === "prompt" ? "Copied" : "Copy"}
-            onAction={() => void copyText("prompt", promptPreview)}
-          >
-            {promptPreview || "Fix parse errors to preview prompt metadata."}
-          </PreviewPanel>
-          <PreviewPanel
-            icon={<Save size={16} />}
-            title="Patch from saved snapshot"
-            actionLabel="Save to IndexedDB"
-            onAction={() => void saveSnapshot()}
-            secondaryActionLabel={copied === "patch" ? "Copied" : "Copy"}
-            onSecondaryAction={() => void copyText("patch", JSON.stringify(patch, null, 2))}
-          >
-            {JSON.stringify(patch, null, 2)}
-          </PreviewPanel>
+        <section className="agent-column" aria-label="CopilotKit mock agent">
+          <header className="agent-header">
+            <div>
+              <p className="eyebrow">CopilotKit UI mock</p>
+              <h1>Agent run</h1>
+            </div>
+            <button className="primary-button run-button" type="button" onClick={runMockAgent}>
+              <Play size={16} />
+              Run with skill
+            </button>
+          </header>
+
+          <section className="agent-status" aria-label="Browser validation result">
+            {isValid ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+            <div>
+              <strong>
+                {isValid
+                  ? "Browser validation ready"
+                  : "Fix validation before relying on this skill"}
+              </strong>
+              <span>
+                {browserResult
+                  ? `${browserResult.tokens ?? tokenEstimate} tokens checked in browser`
+                  : "Run starts by validating the current SKILL.md locally."}
+              </span>
+            </div>
+          </section>
+
+          <div className="mock-chat agent-chat" aria-label="Mock CopilotKit chat transcript">
+            {mockMessages.map((message) => (
+              <div className={`mock-message ${message.role}`} key={message.id}>
+                <span>{message.role === "tool" ? "read_skill tool" : message.role}</span>
+                <Markdown content={message.content} />
+              </div>
+            ))}
+          </div>
         </section>
       </section>
     </main>
@@ -495,110 +477,6 @@ function Field({
       </span>
       {children}
     </label>
-  );
-}
-
-function SkillPreviewPanel({
-  actionLabel,
-  icon,
-  mode,
-  onAction,
-  parsed,
-  rawContent,
-  setMode,
-  title,
-  validationErrors,
-}: {
-  actionLabel: string;
-  icon: ReactNode;
-  mode: PreviewMode;
-  onAction: () => void;
-  parsed: ReturnType<typeof parseContent>;
-  rawContent: string;
-  setMode: (mode: PreviewMode) => void;
-  title: string;
-  validationErrors: string[];
-}) {
-  return (
-    <section className="panel preview-panel">
-      <div className="panel-heading compact">
-        <h2>
-          {icon}
-          {title}
-        </h2>
-        <div className="button-row">
-          <div className="segmented-control" aria-label="SKILL.md preview mode">
-            <button
-              className={mode === "raw" ? "active" : ""}
-              type="button"
-              onClick={() => setMode("raw")}
-            >
-              <Code2 size={15} />
-              Raw
-            </button>
-            <button
-              className={mode === "visual" ? "active" : ""}
-              type="button"
-              onClick={() => setMode("visual")}
-            >
-              <Eye size={15} />
-              Visual
-            </button>
-          </div>
-          <button className="icon-label-button" type="button" onClick={onAction}>
-            <Copy size={15} />
-            {actionLabel}
-          </button>
-        </div>
-      </div>
-      {mode === "raw" ? (
-        <pre>{rawContent}</pre>
-      ) : (
-        <SkillVisual parsed={parsed} validationErrors={validationErrors} />
-      )}
-    </section>
-  );
-}
-
-function PreviewPanel({
-  actionLabel,
-  children,
-  icon,
-  onAction,
-  onSecondaryAction,
-  secondaryActionLabel,
-  title,
-}: {
-  actionLabel: string;
-  children: string;
-  icon: ReactNode;
-  onAction: () => void;
-  onSecondaryAction?: () => void;
-  secondaryActionLabel?: string;
-  title: string;
-}) {
-  return (
-    <section className="panel preview-panel">
-      <div className="panel-heading compact">
-        <h2>
-          {icon}
-          {title}
-        </h2>
-        <div className="button-row">
-          {onSecondaryAction && secondaryActionLabel ? (
-            <button className="icon-label-button" type="button" onClick={onSecondaryAction}>
-              <Copy size={15} />
-              {secondaryActionLabel}
-            </button>
-          ) : null}
-          <button className="icon-label-button" type="button" onClick={onAction}>
-            <Copy size={15} />
-            {actionLabel}
-          </button>
-        </div>
-      </div>
-      <pre>{children}</pre>
-    </section>
   );
 }
 
@@ -857,12 +735,23 @@ function createMockAgentMessages(
   content: string,
   promptPreview: string,
   validationErrors: string[],
+  parseError?: string,
 ): MockChatMessage[] {
   const parsed = parseContent(content);
   const validationSummary =
     parsed.ok && validationErrors.length === 0
       ? "The skill validates successfully in the browser."
       : "The skill has validation issues, so the agent would ask for a fix before relying on it.";
+  const toolSummary =
+    parsed.ok && validationErrors.length === 0
+      ? `Parsed \`${skill.name}\`, validated the SKILL.md, and exposed the prompt metadata.`
+      : [
+          `Tried to parse \`${skill.name}\` from browser state.`,
+          parseError ? `Parser error: ${parseError}` : null,
+          validationErrors.length > 0 ? `Validation errors: ${validationErrors.join("; ")}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n");
 
   return [
     {
@@ -871,13 +760,9 @@ function createMockAgentMessages(
       role: "user",
     },
     {
-      content: [
-        `Loaded \`${skill.name}\` from browser state.`,
-        "",
-        "```xml",
-        promptPreview || "<available_skills />",
-        "```",
-      ].join("\n"),
+      content: [toolSummary, "", "```xml", promptPreview || "<available_skills />", "```"].join(
+        "\n",
+      ),
       id: "tool-read-skill",
       role: "tool",
     },
