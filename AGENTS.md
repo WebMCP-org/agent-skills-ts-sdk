@@ -34,8 +34,8 @@ See `docs/reference/opensrc-sources.md` for the canonical reference repos and
 their intended use.
 
 Use this source code when you need to compare behavior against the Python
-reference implementation, inspect real-world skill examples, or understand
-published agent-skill conventions.
+`skills-ref` implementation/example package, inspect real-world skill examples,
+or understand published agent-skill conventions.
 
 ### Fetching Source Code
 
@@ -55,6 +55,8 @@ fetches on cache miss:
 ```bash
 rg "parse_frontmatter" "$(vp exec opensrc path github:agentskills/agentskills)"
 sed -n '1,220p' "$(vp exec opensrc path github:agentskills/agentskills)/skills-ref/src/skills_ref/parser.py"
+PY_REF="$(vp exec opensrc path github:agentskills/agentskills)/skills-ref"
+rg "validate" "$PY_REF/tests"
 find "$(vp exec opensrc path github:anthropics/skills)" -name SKILL.md
 ```
 

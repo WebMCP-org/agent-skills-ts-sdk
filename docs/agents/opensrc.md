@@ -22,7 +22,17 @@ vp exec opensrc path github:anthropics/skills
 vp exec opensrc path github:vercel-labs/agent-skills
 ```
 
-Use `agentskills/agentskills` as the behavioral reference, especially
-`skills-ref/src/skills_ref/*.py` and `skills-ref/tests`. Use `anthropics/skills`
-and `vercel-labs/agent-skills` as example-skill corpora and convention
-references, not as stricter sources of truth than the official specification.
+Use `agentskills/agentskills` as the behavioral reference. The AgentSkills.io
+Python example/reference package lives inside that repo at `skills-ref/`; access
+it through `opensrc path`, not a direct clone or `git+https://...#subdirectory`
+checkout.
+
+```bash
+PY_REF="$(vp exec opensrc path github:agentskills/agentskills)/skills-ref"
+rg "parse" "$PY_REF/src/skills_ref"
+rg "validate" "$PY_REF/tests"
+```
+
+Use `anthropics/skills` and `vercel-labs/agent-skills` as example-skill corpora
+and convention references, not as stricter sources of truth than the official
+specification.
