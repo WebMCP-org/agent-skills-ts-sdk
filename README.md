@@ -30,8 +30,9 @@ SDK against editable `SKILL.md` content.
 pnpm playground:dev
 ```
 
-The playground shows live parsing, validation, prompt metadata, token estimates,
-patch generation, and Worker-side validation using the same SDK entry points.
+The playground shows live browser-side parsing and validation, prompt metadata,
+token estimates, patch generation, IndexedDB storage, and raw/rendered Markdown
+previews using the same SDK entry points.
 
 ## Usage
 

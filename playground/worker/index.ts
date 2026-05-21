@@ -1,9 +1,4 @@
-import {
-  estimateTokens,
-  parseSkillContent,
-  toPrompt,
-  validateSkillContent,
-} from "../../src/index.ts";
+import { estimateTokens, toPrompt, validateSkillContent } from "../../src/index.ts";
 
 type SampleSkill = {
   content: string;
@@ -94,40 +89,9 @@ export default {
       });
     }
 
-    if (url.pathname === "/api/validate" && request.method === "POST") {
-      const payload = await request.json().catch(() => null);
-      const content =
-        isRecord(payload) && typeof payload.content === "string" ? payload.content : "";
-      if (!content) {
-        return jsonResponse({ error: "Expected JSON body with content" }, { status: 400 });
-      }
-
-      try {
-        const parsed = parseSkillContent(content);
-        return jsonResponse({
-          ok: true,
-          bodyLength: parsed.body.length,
-          properties: parsed.properties,
-          prompt: toPrompt([{ content, location: "editor/SKILL.md" }]),
-          tokens: estimateTokens(content),
-          validationErrors: validateSkillContent(content),
-        });
-      } catch (error) {
-        return jsonResponse({
-          ok: false,
-          error: error instanceof Error ? error.message : String(error),
-          validationErrors: validateSkillContent(content),
-        });
-      }
-    }
-
     return new Response("Not found", { status: 404 });
   },
 } satisfies { fetch(request: Request): Promise<Response> };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
 
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers);

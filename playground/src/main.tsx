@@ -1,16 +1,19 @@
 import {
   AlertCircle,
   Braces,
+  Code2,
   CheckCircle2,
   Copy,
+  Database,
+  Eye,
   FileText,
-  Loader2,
   Play,
   RefreshCcw,
   Save,
+  Trash2,
   WandSparkles,
 } from "lucide-react";
-import { StrictMode, useCallback, useEffect, useMemo, useState } from "react";
+import { StrictMode, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import {
   createSkillPatch,
@@ -20,6 +23,7 @@ import {
   validateSkillContent,
   type SkillProperties,
 } from "../../src/index.ts";
+// @ts-ignore Vite handles CSS side-effect imports in the playground build.
 import "./styles.css";
 
 type SkillFormData = {
@@ -38,7 +42,7 @@ type ExampleSummary = {
   tokens: number;
 };
 
-type ValidationResponse = {
+type BrowserValidationResult = {
   bodyLength?: number;
   error?: string;
   ok: boolean;
@@ -47,6 +51,21 @@ type ValidationResponse = {
   tokens?: number;
   validationErrors: string[];
 };
+
+type SavedSkill = {
+  content: string;
+  description: string;
+  id: string;
+  name: string;
+  tokens: number;
+  updatedAt: number;
+};
+
+type PreviewMode = "raw" | "visual";
+
+const skillDbName = "agent-skills-ts-sdk-playground";
+const skillDbVersion = 1;
+const skillsStoreName = "skills";
 
 const defaultSkill: SkillFormData = {
   allowedTools: "Read Grep Bash(pnpm:*)",
@@ -72,8 +91,10 @@ function App() {
   const [formData, setFormData] = useState(defaultSkill);
   const [savedContent, setSavedContent] = useState(() => assembleSkillContent(defaultSkill));
   const [examples, setExamples] = useState<ExampleSummary[]>([]);
-  const [serverResult, setServerResult] = useState<ValidationResponse | null>(null);
-  const [isServerBusy, setIsServerBusy] = useState(false);
+  const [savedSkills, setSavedSkills] = useState<SavedSkill[]>([]);
+  const [browserResult, setBrowserResult] = useState<BrowserValidationResult | null>(null);
+  const [storageMessage, setStorageMessage] = useState<string | null>(null);
+  const [skillPreviewMode, setSkillPreviewMode] = useState<PreviewMode>("raw");
   const [copied, setCopied] = useState<"content" | "prompt" | "patch" | null>(null);
 
   const content = useMemo(() => assembleSkillContent(formData), [formData]);
@@ -97,6 +118,10 @@ function App() {
       .catch(() => setExamples([]));
   }, []);
 
+  useEffect(() => {
+    void refreshSavedSkills(setSavedSkills);
+  }, []);
+
   const updateField = useCallback(
     (field: keyof SkillFormData) =>
       (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -112,27 +137,42 @@ function App() {
       const next = parseToFormData(example.content);
       setFormData(next);
       setSavedContent(example.content);
-      setServerResult(null);
+      setBrowserResult(null);
     }
   }, []);
 
-  const validateOnWorker = useCallback(async () => {
-    setIsServerBusy(true);
-    try {
-      const response = await fetch("/api/validate", {
-        body: JSON.stringify({ content }),
-        headers: { "content-type": "application/json" },
-        method: "POST",
-      });
-      setServerResult((await response.json()) as ValidationResponse);
-    } finally {
-      setIsServerBusy(false);
-    }
-  }, [content]);
+  const validateInBrowser = useCallback(() => {
+    setBrowserResult({
+      bodyLength: parsed.ok ? parsed.body.length : undefined,
+      error: parsed.ok ? undefined : parsed.error,
+      ok: parsed.ok && validationErrors.length === 0,
+      prompt: promptPreview,
+      properties: parsed.ok ? parsed.properties : undefined,
+      tokens: tokenEstimate,
+      validationErrors,
+    });
+  }, [parsed, promptPreview, tokenEstimate, validationErrors]);
 
-  const saveSnapshot = useCallback(() => {
+  const saveSnapshot = useCallback(async () => {
+    const record = createSavedSkillRecord(content, formData);
+    await putSavedSkill(record);
+    await refreshSavedSkills(setSavedSkills);
     setSavedContent(content);
-  }, [content]);
+    setStorageMessage(`Saved ${record.name} to IndexedDB`);
+  }, [content, formData]);
+
+  const loadSavedSkill = useCallback(async (skill: SavedSkill) => {
+    setFormData(parseToFormData(skill.content));
+    setSavedContent(skill.content);
+    setBrowserResult(null);
+    setStorageMessage(`Loaded ${skill.name} from IndexedDB`);
+  }, []);
+
+  const deleteSavedSkill = useCallback(async (skill: SavedSkill) => {
+    await deleteSkillRecord(skill.id);
+    await refreshSavedSkills(setSavedSkills);
+    setStorageMessage(`Deleted ${skill.name} from IndexedDB`);
+  }, []);
 
   const copyText = useCallback(async (kind: "content" | "prompt" | "patch", value: string) => {
     await navigator.clipboard.writeText(value);
@@ -238,7 +278,7 @@ function App() {
               <div className="panel-heading">
                 <div>
                   <h2>Validation</h2>
-                  <p>Client and Worker both use the SDK.</p>
+                  <p>Runs entirely in the browser with the SDK.</p>
                 </div>
                 {validationErrors.length === 0 && parsed.ok ? (
                   <CheckCircle2 className="success-icon" size={18} />
@@ -250,39 +290,74 @@ function App() {
                 parseError={parsed.ok ? null : parsed.error}
                 errors={validationErrors}
               />
-              <button
-                className="primary-button"
-                type="button"
-                onClick={() => void validateOnWorker()}
-              >
-                {isServerBusy ? <Loader2 className="spin" size={16} /> : <Play size={16} />}
-                Validate on Worker
+              <button className="primary-button" type="button" onClick={validateInBrowser}>
+                <Play size={16} />
+                Validate in browser
               </button>
-              {serverResult && (
+              {browserResult && (
                 <div className="worker-result">
                   <strong>
-                    {serverResult.ok ? "Worker parsed the skill" : "Worker rejected the skill"}
+                    {browserResult.ok ? "Browser validation passed" : "Browser validation failed"}
                   </strong>
                   <span>
-                    {serverResult.validationErrors.length === 0
-                      ? `${serverResult.tokens ?? 0} estimated tokens`
-                      : `${serverResult.validationErrors.length} validation issue(s)`}
+                    {browserResult.validationErrors.length === 0 && !browserResult.error
+                      ? `${browserResult.tokens ?? 0} estimated tokens`
+                      : `${browserResult.validationErrors.length + (browserResult.error ? 1 : 0)} validation issue(s)`}
                   </span>
                 </div>
               )}
+            </section>
+
+            <section className="panel">
+              <div className="panel-heading">
+                <div>
+                  <h2>IndexedDB storage</h2>
+                  <p>Saved skills stay in this browser.</p>
+                </div>
+                <Database size={18} />
+              </div>
+              {storageMessage ? <p className="storage-message">{storageMessage}</p> : null}
+              <div className="saved-list">
+                {savedSkills.length === 0 ? (
+                  <p className="empty-state">No saved skills yet.</p>
+                ) : (
+                  savedSkills.map((skill) => (
+                    <div className="saved-row" key={skill.id}>
+                      <button type="button" onClick={() => void loadSavedSkill(skill)}>
+                        <span>
+                          <strong>{skill.name}</strong>
+                          <small>{new Date(skill.updatedAt).toLocaleString()}</small>
+                        </span>
+                        <code>{skill.tokens}</code>
+                      </button>
+                      <button
+                        className="icon-button"
+                        type="button"
+                        onClick={() => void deleteSavedSkill(skill)}
+                        title={`Delete ${skill.name}`}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
             </section>
           </aside>
         </section>
 
         <section className="preview-grid">
-          <PreviewPanel
+          <SkillPreviewPanel
             icon={<FileText size={16} />}
+            mode={skillPreviewMode}
+            parsed={parsed}
+            setMode={setSkillPreviewMode}
             title="SKILL.md"
             actionLabel={copied === "content" ? "Copied" : "Copy"}
             onAction={() => void copyText("content", content)}
-          >
-            {content}
-          </PreviewPanel>
+            rawContent={content}
+            validationErrors={validationErrors}
+          />
           <PreviewPanel
             icon={<Braces size={16} />}
             title="Prompt metadata"
@@ -294,8 +369,8 @@ function App() {
           <PreviewPanel
             icon={<Save size={16} />}
             title="Patch from saved snapshot"
-            actionLabel={hasChanges ? "Save snapshot" : "Saved"}
-            onAction={saveSnapshot}
+            actionLabel="Save to IndexedDB"
+            onAction={() => void saveSnapshot()}
             secondaryActionLabel={copied === "patch" ? "Copied" : "Copy"}
             onSecondaryAction={() => void copyText("patch", JSON.stringify(patch, null, 2))}
           >
@@ -313,7 +388,7 @@ function Field({
   label,
   wide = false,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   detail?: string;
   label: string;
   wide?: boolean;
@@ -329,6 +404,68 @@ function Field({
   );
 }
 
+function SkillPreviewPanel({
+  actionLabel,
+  icon,
+  mode,
+  onAction,
+  parsed,
+  rawContent,
+  setMode,
+  title,
+  validationErrors,
+}: {
+  actionLabel: string;
+  icon: ReactNode;
+  mode: PreviewMode;
+  onAction: () => void;
+  parsed: ReturnType<typeof parseContent>;
+  rawContent: string;
+  setMode: (mode: PreviewMode) => void;
+  title: string;
+  validationErrors: string[];
+}) {
+  return (
+    <section className="panel preview-panel">
+      <div className="panel-heading compact">
+        <h2>
+          {icon}
+          {title}
+        </h2>
+        <div className="button-row">
+          <div className="segmented-control" aria-label="SKILL.md preview mode">
+            <button
+              className={mode === "raw" ? "active" : ""}
+              type="button"
+              onClick={() => setMode("raw")}
+            >
+              <Code2 size={15} />
+              Raw
+            </button>
+            <button
+              className={mode === "visual" ? "active" : ""}
+              type="button"
+              onClick={() => setMode("visual")}
+            >
+              <Eye size={15} />
+              Visual
+            </button>
+          </div>
+          <button className="icon-label-button" type="button" onClick={onAction}>
+            <Copy size={15} />
+            {actionLabel}
+          </button>
+        </div>
+      </div>
+      {mode === "raw" ? (
+        <pre>{rawContent}</pre>
+      ) : (
+        <SkillVisual parsed={parsed} validationErrors={validationErrors} />
+      )}
+    </section>
+  );
+}
+
 function PreviewPanel({
   actionLabel,
   children,
@@ -340,7 +477,7 @@ function PreviewPanel({
 }: {
   actionLabel: string;
   children: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   onAction: () => void;
   onSecondaryAction?: () => void;
   secondaryActionLabel?: string;
@@ -375,10 +512,84 @@ function StatusPill({
   children,
   tone,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   tone: "error" | "neutral" | "success" | "warn";
 }) {
   return <span className={`status-pill ${tone}`}>{children}</span>;
+}
+
+function SkillVisual({
+  parsed,
+  validationErrors,
+}: {
+  parsed: ReturnType<typeof parseContent>;
+  validationErrors: string[];
+}) {
+  if (!parsed.ok) {
+    return (
+      <div className="markdown-preview invalid">
+        <strong>Unable to render SKILL.md</strong>
+        <p>{parsed.error}</p>
+      </div>
+    );
+  }
+
+  const properties = parsed.properties;
+
+  return (
+    <div className="markdown-preview">
+      <div className="visual-metadata">
+        <span>Name</span>
+        <strong>{properties.name}</strong>
+        <span>Description</span>
+        <p>{properties.description}</p>
+        {properties.compatibility ? (
+          <>
+            <span>Compatibility</span>
+            <p>{properties.compatibility}</p>
+          </>
+        ) : null}
+        {properties.allowedTools ? (
+          <>
+            <span>Allowed tools</span>
+            <code>{properties.allowedTools}</code>
+          </>
+        ) : null}
+      </div>
+      {validationErrors.length > 0 ? (
+        <ValidationList errors={validationErrors} parseError={null} />
+      ) : null}
+      <MarkdownBody markdown={parsed.body} />
+    </div>
+  );
+}
+
+function MarkdownBody({ markdown }: { markdown: string }) {
+  const blocks = parseMarkdownBlocks(markdown);
+
+  return (
+    <div className="markdown-body">
+      {blocks.map((block, index) => {
+        if (block.kind === "heading") {
+          const HeadingTag = `h${Math.min(block.level, 3)}` as "h1" | "h2" | "h3";
+          return <HeadingTag key={`${block.kind}-${index}`}>{block.text}</HeadingTag>;
+        }
+        if (block.kind === "list") {
+          return (
+            <ul key={`${block.kind}-${index}`}>
+              {block.items.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          );
+        }
+        if (block.kind === "code") {
+          return <pre key={`${block.kind}-${index}`}>{block.text}</pre>;
+        }
+        return <p key={`${block.kind}-${index}`}>{block.text}</p>;
+      })}
+    </div>
+  );
 }
 
 function ValidationList({ errors, parseError }: { errors: string[]; parseError: string | null }) {
@@ -433,6 +644,161 @@ function assembleSkillContent(data: SkillFormData): string {
 
 function quoteYaml(value: string): string {
   return JSON.stringify(value.trim());
+}
+
+type MarkdownBlock =
+  | { kind: "code"; text: string }
+  | { kind: "heading"; level: number; text: string }
+  | { kind: "list"; items: string[] }
+  | { kind: "paragraph"; text: string };
+
+function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
+  const blocks: MarkdownBlock[] = [];
+  const lines = markdown.split("\n");
+  let paragraph: string[] = [];
+  let listItems: string[] = [];
+  let codeLines: string[] = [];
+  let inCodeBlock = false;
+
+  const flushParagraph = () => {
+    if (paragraph.length > 0) {
+      blocks.push({ kind: "paragraph", text: paragraph.join(" ") });
+      paragraph = [];
+    }
+  };
+
+  const flushList = () => {
+    if (listItems.length > 0) {
+      blocks.push({ kind: "list", items: listItems });
+      listItems = [];
+    }
+  };
+
+  for (const line of lines) {
+    if (line.trim().startsWith("```")) {
+      if (inCodeBlock) {
+        blocks.push({ kind: "code", text: codeLines.join("\n") });
+        codeLines = [];
+        inCodeBlock = false;
+      } else {
+        flushParagraph();
+        flushList();
+        inCodeBlock = true;
+      }
+      continue;
+    }
+
+    if (inCodeBlock) {
+      codeLines.push(line);
+      continue;
+    }
+
+    const heading = /^(#{1,6})\s+(.+)$/.exec(line);
+    if (heading) {
+      flushParagraph();
+      flushList();
+      blocks.push({ kind: "heading", level: heading[1].length, text: heading[2] });
+      continue;
+    }
+
+    const listItem = /^\s*(?:[-*]|\d+\.)\s+(.+)$/.exec(line);
+    if (listItem) {
+      flushParagraph();
+      listItems.push(listItem[1]);
+      continue;
+    }
+
+    if (!line.trim()) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+
+    flushList();
+    paragraph.push(line.trim());
+  }
+
+  if (inCodeBlock) {
+    blocks.push({ kind: "code", text: codeLines.join("\n") });
+  }
+  flushParagraph();
+  flushList();
+
+  return blocks;
+}
+
+function createSavedSkillRecord(content: string, fallback: SkillFormData): SavedSkill {
+  const parsed = parseContent(content);
+  const name = parsed.ok ? parsed.properties.name : fallback.name.trim() || "invalid-skill";
+  const description = parsed.ok ? parsed.properties.description : fallback.description.trim();
+
+  return {
+    content,
+    description,
+    id: name,
+    name,
+    tokens: estimateTokens(content),
+    updatedAt: Date.now(),
+  };
+}
+
+async function refreshSavedSkills(setSavedSkills: (skills: SavedSkill[]) => void): Promise<void> {
+  const skills = await getSavedSkills();
+  setSavedSkills(skills.sort((a, b) => b.updatedAt - a.updatedAt));
+}
+
+async function getSavedSkills(): Promise<SavedSkill[]> {
+  const db = await openSkillDb();
+
+  return new Promise((resolve, reject) => {
+    const request = db
+      .transaction(skillsStoreName, "readonly")
+      .objectStore(skillsStoreName)
+      .getAll();
+    request.onsuccess = () => resolve(request.result as SavedSkill[]);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function putSavedSkill(skill: SavedSkill): Promise<void> {
+  const db = await openSkillDb();
+
+  return new Promise((resolve, reject) => {
+    const request = db
+      .transaction(skillsStoreName, "readwrite")
+      .objectStore(skillsStoreName)
+      .put(skill);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function deleteSkillRecord(id: string): Promise<void> {
+  const db = await openSkillDb();
+
+  return new Promise((resolve, reject) => {
+    const request = db
+      .transaction(skillsStoreName, "readwrite")
+      .objectStore(skillsStoreName)
+      .delete(id);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function openSkillDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(skillDbName, skillDbVersion);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(skillsStoreName)) {
+        db.createObjectStore(skillsStoreName, { keyPath: "id" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
 }
 
 createRoot(document.getElementById("root")!).render(
