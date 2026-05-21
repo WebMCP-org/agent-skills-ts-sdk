@@ -200,7 +200,7 @@ function App() {
             </button>
           </div>
         </div>
-        <div className="flex items-center justify-between gap-4 border-t px-4 py-2 sm:px-6">
+        <div className="border-t px-4 py-2 sm:px-6">
           <div className="inline-flex rounded-md border bg-muted p-1" aria-label="Skill view">
             <button
               className={previewButtonClass(viewMode === "editor")}
@@ -226,9 +226,6 @@ function App() {
               Rich
             </button>
           </div>
-          <code className="hidden min-w-0 truncate rounded bg-muted/50 px-2 py-1 text-xs text-muted-foreground md:block">
-            parseSkillContent · validateSkillContent · toPrompt · estimateTokens
-          </code>
         </div>
       </header>
 
