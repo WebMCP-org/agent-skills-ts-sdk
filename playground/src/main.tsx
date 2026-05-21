@@ -1,8 +1,16 @@
-import { ChevronDown, Code2, Copy, Eye, Github, Play, RefreshCcw, Save } from "lucide-react";
+import { ChevronDown, Code2, Copy, Eye, Github, Loader2, Play } from "lucide-react";
 import { Markdown } from "@copilotkit/react-ui";
 // @ts-ignore Vite handles CSS side-effect imports in the playground build.
 import "@copilotkit/react-ui/styles.css";
-import { StrictMode, useCallback, useMemo, useState, type ReactNode } from "react";
+import {
+  StrictMode,
+  useCallback,
+  useMemo,
+  useState,
+  type ChangeEvent,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
 import { createRoot, type Root } from "react-dom/client";
 import {
   estimateTokens,
@@ -40,15 +48,9 @@ type MockChatMessage = {
 
 type ViewMode = "editor" | "raw" | "rich";
 
-const buttonBaseClass =
-  "inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-md px-3 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50";
-const ghostButtonClass = `${buttonBaseClass} hover:bg-accent hover:text-accent-foreground`;
-const outlineButtonClass = `${buttonBaseClass} border bg-background hover:bg-accent hover:text-accent-foreground`;
-const primaryButtonClass = `${buttonBaseClass} bg-primary text-primary-foreground hover:bg-primary/90`;
-const inputClass =
-  "h-10 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/20";
-const textareaClass =
-  "w-full min-w-0 rounded-md border border-input bg-background px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/20";
+const MAX_SKILL_NAME_LENGTH = 64;
+const MAX_DESCRIPTION_LENGTH = 1024;
+const MAX_COMPATIBILITY_LENGTH = 500;
 
 declare global {
   interface Window {
@@ -100,14 +102,6 @@ function App() {
   const tokenEstimate = useMemo(() => estimateTokens(content), [content]);
   const hasChanges = content !== savedContent;
   const isValid = parsed.ok && validationErrors.length === 0;
-
-  const updateField = useCallback(
-    (field: keyof SkillFormData) =>
-      (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-        setFormData((current) => ({ ...current, [field]: event.target.value }));
-      },
-    [],
-  );
 
   const resetSkill = useCallback(() => {
     setFormData(defaultSkill);
@@ -176,7 +170,7 @@ function App() {
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <a
-              className={outlineButtonClass}
+              className={buttonClass({ variant: "outline" })}
               href="https://github.com/WebMCP-org/agent-skills-ts-sdk"
               rel="noreferrer"
               target="_blank"
@@ -185,7 +179,7 @@ function App() {
               <span className="hidden sm:inline">GitHub</span>
             </a>
             <a
-              className={outlineButtonClass}
+              className={buttonClass({ variant: "outline" })}
               href="https://github.com/WebMCP-org/agent-skills-ts-sdk/blob/main/README.md"
               rel="noreferrer"
               target="_blank"
@@ -193,26 +187,14 @@ function App() {
               README
             </a>
             <button
-              aria-label="Reset skill"
-              className={outlineButtonClass}
+              className={buttonClass({ variant: "outline" })}
               type="button"
-              onClick={resetSkill}
+              onClick={() => void copySkill()}
             >
-              <RefreshCcw size={16} />
-            </button>
-            <button className={outlineButtonClass} type="button" onClick={() => void copySkill()}>
               <Copy size={15} />
               <span className="hidden sm:inline">{copied === "content" ? "Copied" : "Copy"}</span>
             </button>
-            <button
-              className={outlineButtonClass}
-              type="button"
-              onClick={() => void saveSnapshot()}
-            >
-              <Save size={16} />
-              <span className="hidden sm:inline">Save</span>
-            </button>
-            <button className={primaryButtonClass} type="button" onClick={runMockAgent}>
+            <button className={buttonClass()} type="button" onClick={runMockAgent}>
               <Play size={16} />
               Run
             </button>
@@ -257,85 +239,16 @@ function App() {
         <section className="flex min-h-0 min-w-0 flex-col" aria-label="Skill workspace">
           <div className="min-h-0 flex-1 overflow-auto px-4 py-6 sm:px-6 lg:px-8">
             {viewMode === "editor" ? (
-              <div className="mx-auto max-w-3xl space-y-6">
-                <Field label="Name" detail={`${formData.name.length}/64`}>
-                  <input
-                    autoComplete="off"
-                    className={inputClass}
-                    data-mono="true"
-                    name="skill-name"
-                    value={formData.name}
-                    onChange={updateField("name")}
-                    spellCheck={false}
-                  />
-                </Field>
-
-                <Field label="Description" detail={`${formData.description.length}/1024`}>
-                  <textarea
-                    autoComplete="off"
-                    className={`${textareaClass} min-h-24 resize-none`}
-                    name="skill-description"
-                    value={formData.description}
-                    onChange={updateField("description")}
-                    placeholder="Describe what this skill does and when the agent should use it…"
-                  />
-                </Field>
-
-                <details className="group border-t pt-2">
-                  <summary
-                    className={`${ghostButtonClass} flex w-full list-none justify-between px-0 hover:bg-transparent [&::-webkit-details-marker]:hidden`}
-                  >
-                    <span className="text-sm font-medium text-muted-foreground">
-                      Optional Fields
-                    </span>
-                    <ChevronDown className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
-                  </summary>
-                  <div className="grid gap-4 pt-4 sm:grid-cols-2">
-                    <Field label="Compatibility" detail={`${formData.compatibility.length}/500`}>
-                      <input
-                        autoComplete="off"
-                        className={inputClass}
-                        name="skill-compatibility"
-                        value={formData.compatibility}
-                        onChange={updateField("compatibility")}
-                        placeholder="Requires Node.js 22+, filesystem access…"
-                      />
-                    </Field>
-                    <Field label="License">
-                      <input
-                        autoComplete="off"
-                        className={inputClass}
-                        name="skill-license"
-                        value={formData.license}
-                        onChange={updateField("license")}
-                        placeholder="MIT"
-                      />
-                    </Field>
-                    <Field label="Allowed Tools" wide>
-                      <input
-                        autoComplete="off"
-                        className={inputClass}
-                        data-mono="true"
-                        name="skill-allowed-tools"
-                        value={formData.allowedTools}
-                        onChange={updateField("allowedTools")}
-                        placeholder="Bash(git:*) Read Write"
-                      />
-                    </Field>
-                  </div>
-                </details>
-
-                <Field label="Instructions (Markdown)">
-                  <textarea
-                    autoComplete="off"
-                    className={`${textareaClass} min-h-[42vh] resize-y font-mono leading-6`}
-                    data-mono="true"
-                    name="skill-body"
-                    value={formData.body}
-                    onChange={updateField("body")}
-                    spellCheck={false}
-                  />
-                </Field>
+              <div className="mx-auto max-w-3xl">
+                <SkillForm
+                  value={formData}
+                  onCancel={resetSkill}
+                  onChange={(next) => {
+                    setFormData(next);
+                    setStorageMessage(null);
+                  }}
+                  onSubmit={() => void saveSnapshot()}
+                />
               </div>
             ) : viewMode === "raw" ? (
               <div className="mx-auto max-w-4xl space-y-4">
@@ -376,27 +289,305 @@ function App() {
   );
 }
 
-function Field({
-  children,
-  detail,
-  label,
-  wide = false,
+function cn(...classes: Array<false | null | string | undefined>): string {
+  return classes.filter(Boolean).join(" ");
+}
+
+function buttonClass({
+  className,
+  size = "default",
+  variant = "default",
 }: {
-  children: ReactNode;
-  detail?: string;
-  label: string;
-  wide?: boolean;
+  className?: string;
+  size?: "default" | "icon" | "sm";
+  variant?: "default" | "ghost" | "outline";
+} = {}): string {
+  const base =
+    "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 aria-invalid:border-destructive";
+  const variants = {
+    default: "bg-primary text-primary-foreground hover:bg-primary/90",
+    ghost: "hover:bg-accent hover:text-accent-foreground",
+    outline: "border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground",
+  };
+  const sizes = {
+    default: "h-9 px-4 py-2 has-[>svg]:px-3",
+    icon: "size-9",
+    sm: "h-8 gap-1.5 px-3 has-[>svg]:px-2.5",
+  };
+
+  return cn(base, variants[variant], sizes[size], className);
+}
+
+function Button({
+  className,
+  size = "default",
+  variant = "default",
+  ...props
+}: ComponentProps<"button"> & {
+  size?: "default" | "icon" | "sm";
+  variant?: "default" | "ghost" | "outline";
 }) {
   return (
-    <label className={wide ? "grid min-w-0 gap-2 sm:col-span-2" : "grid min-w-0 gap-2"}>
-      <span className="flex items-center justify-between gap-3 text-sm font-medium">
-        {label}
-        {detail ? (
-          <small className="font-mono text-xs text-muted-foreground tabular-nums">{detail}</small>
+    <button
+      className={buttonClass({ className, size, variant })}
+      data-size={size}
+      data-variant={variant}
+      {...props}
+    />
+  );
+}
+
+function Input({ className, type, ...props }: ComponentProps<"input">) {
+  return (
+    <input
+      className={cn(
+        "file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
+        "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
+        "aria-invalid:ring-destructive/20 aria-invalid:border-destructive",
+        className,
+      )}
+      data-slot="input"
+      type={type}
+      {...props}
+    />
+  );
+}
+
+function Textarea({ className, ...props }: ComponentProps<"textarea">) {
+  return (
+    <textarea
+      className={cn(
+        "border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 aria-invalid:border-destructive flex field-sizing-content min-h-16 w-full rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
+        className,
+      )}
+      data-slot="textarea"
+      {...props}
+    />
+  );
+}
+
+function Label({ className, ...props }: ComponentProps<"label">) {
+  return (
+    <label
+      className={cn(
+        "flex items-center gap-2 text-sm leading-none font-medium select-none peer-disabled:cursor-not-allowed peer-disabled:opacity-50",
+        className,
+      )}
+      data-slot="label"
+      {...props}
+    />
+  );
+}
+
+function CharacterCounter({ current, max }: { current: number; max: number }) {
+  const percentage = (current / max) * 100;
+  const isWarning = percentage >= 80 && percentage < 100;
+  const isOver = percentage >= 100;
+
+  return (
+    <span
+      className={cn(
+        "text-xs tabular-nums",
+        isOver && "text-destructive",
+        isWarning && "text-warning",
+        !isOver && !isWarning && "text-muted-foreground",
+      )}
+    >
+      {current}/{max}
+    </span>
+  );
+}
+
+function SkillForm({
+  isLoading = false,
+  onCancel,
+  onChange,
+  onSubmit,
+  submitLabel = "Save",
+  value,
+}: {
+  isLoading?: boolean;
+  onCancel?: () => void;
+  onChange: (value: SkillFormData) => void;
+  onSubmit: () => void | Promise<void>;
+  submitLabel?: string;
+  value: SkillFormData;
+}) {
+  const [optionalOpen, setOptionalOpen] = useState(false);
+
+  const updateField =
+    (field: keyof SkillFormData) =>
+    (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      onChange({ ...value, [field]: event.target.value });
+    };
+
+  return (
+    <form
+      className="space-y-6"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void onSubmit();
+      }}
+    >
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="skill-name">
+              Name <span className="text-destructive">*</span>
+            </Label>
+            <CharacterCounter current={value.name.length} max={MAX_SKILL_NAME_LENGTH} />
+          </div>
+          <Input
+            aria-invalid={value.name.length > MAX_SKILL_NAME_LENGTH}
+            autoComplete="off"
+            data-mono="true"
+            disabled={isLoading}
+            id="skill-name"
+            placeholder="my-skill-name"
+            spellCheck={false}
+            value={value.name}
+            onChange={updateField("name")}
+          />
+          <p className="text-xs text-muted-foreground">
+            Lowercase letters, numbers, and hyphens only
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="skill-description">
+              Description <span className="text-destructive">*</span>
+            </Label>
+            <CharacterCounter current={value.description.length} max={MAX_DESCRIPTION_LENGTH} />
+          </div>
+          <Textarea
+            aria-invalid={value.description.length > MAX_DESCRIPTION_LENGTH}
+            className="min-h-[80px] resize-none"
+            disabled={isLoading}
+            id="skill-description"
+            placeholder="Describe what this skill does and when the agent should use it..."
+            value={value.description}
+            onChange={updateField("description")}
+          />
+          <p className="text-xs text-muted-foreground">
+            Explain what the skill does and when to use it
+          </p>
+        </div>
+      </div>
+
+      <div>
+        <Button
+          className="flex w-full items-center justify-between px-0 hover:bg-transparent"
+          type="button"
+          variant="ghost"
+          onClick={() => setOptionalOpen((open) => !open)}
+        >
+          <span className="text-sm font-medium text-muted-foreground">Optional Fields</span>
+          <ChevronDown
+            className={cn(
+              "size-4 text-muted-foreground transition-transform",
+              optionalOpen && "rotate-180",
+            )}
+          />
+        </Button>
+        {optionalOpen ? (
+          <div className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="skill-compatibility">Compatibility</Label>
+                <CharacterCounter
+                  current={value.compatibility.length}
+                  max={MAX_COMPATIBILITY_LENGTH}
+                />
+              </div>
+              <Input
+                aria-invalid={value.compatibility.length > MAX_COMPATIBILITY_LENGTH}
+                autoComplete="off"
+                disabled={isLoading}
+                id="skill-compatibility"
+                placeholder="Requires Node.js 18+, access to filesystem"
+                value={value.compatibility}
+                onChange={updateField("compatibility")}
+              />
+              <p className="text-xs text-muted-foreground">Environment requirements (optional)</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="skill-license">License</Label>
+              <Input
+                autoComplete="off"
+                disabled={isLoading}
+                id="skill-license"
+                placeholder="MIT"
+                value={value.license}
+                onChange={updateField("license")}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="skill-allowed-tools">Allowed Tools</Label>
+              <Input
+                autoComplete="off"
+                data-mono="true"
+                disabled={isLoading}
+                id="skill-allowed-tools"
+                placeholder="Bash(git:*) Read Write"
+                spellCheck={false}
+                value={value.allowedTools}
+                onChange={updateField("allowedTools")}
+              />
+              <p className="text-xs text-muted-foreground">
+                Space-separated list of pre-approved tools (advanced)
+              </p>
+            </div>
+          </div>
         ) : null}
-      </span>
-      {children}
-    </label>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="skill-body">Instructions (Markdown)</Label>
+        <Textarea
+          className="min-h-[42vh] resize-y font-mono text-sm leading-6"
+          data-mono="true"
+          disabled={isLoading}
+          id="skill-body"
+          placeholder={`# How to Use This Skill
+
+1. First, do this...
+2. Then do that...
+
+## Examples
+
+\`\`\`
+Example code here
+\`\`\``}
+          spellCheck={false}
+          value={value.body}
+          onChange={updateField("body")}
+        />
+        <p className="text-xs text-muted-foreground">
+          Markdown content that teaches the agent how to help
+        </p>
+      </div>
+
+      <div className="flex justify-end gap-2">
+        {onCancel ? (
+          <Button disabled={isLoading} type="button" variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+        ) : null}
+        <Button disabled={isLoading} type="submit">
+          {isLoading ? (
+            <>
+              <Loader2 className="mr-2 size-4 animate-spin" />
+              Saving...
+            </>
+          ) : (
+            submitLabel
+          )}
+        </Button>
+      </div>
+    </form>
   );
 }
 
