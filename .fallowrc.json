@@ -1,0 +1,23 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+  "entry": ["src/index.{ts,tsx,js,jsx}", "vite.config.{ts,tsx,js,jsx}"],
+  "ignorePatterns": ["dist/**", "coverage/**"],
+  "ignoreDependencies": [
+    "@arethetypeswrong/cli",
+    "@changesets/cli",
+    "@types/node",
+    "@vitest/coverage-v8",
+    "fallow",
+    "publint",
+    "typescript",
+    "vite-plus",
+    "vitest"
+  ],
+  "duplicates": {
+    "ignore": ["tests/**"],
+    "threshold": 0
+  },
+  "rules": {
+    "unused-catalog-entries": "off"
+  }
+}
