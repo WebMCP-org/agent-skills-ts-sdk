@@ -1,7 +1,15 @@
-import { ChevronDown, Code2, Copy, Eye, Github, Loader2, Play } from "lucide-react";
-import { Markdown } from "@copilotkit/react-ui";
+import { ChevronDown, Code2, Copy, Eye, Github, Loader2 } from "lucide-react";
+import {
+  AbstractAgent,
+  CopilotChat,
+  CopilotKitProvider,
+  EventType,
+  type BaseEvent,
+  type RunAgentInput,
+} from "@copilotkit/react-core/v2";
+import { Observable } from "rxjs";
 // @ts-ignore Vite handles CSS side-effect imports in the playground build.
-import "@copilotkit/react-ui/styles.css";
+import "@copilotkit/react-core/v2/styles.css";
 import {
   StrictMode,
   useCallback,
@@ -15,7 +23,6 @@ import { createRoot, type Root } from "react-dom/client";
 import {
   estimateTokens,
   parseSkillContent,
-  toPrompt,
   validateSkillContent,
   type SkillProperties,
 } from "../../src/index.ts";
@@ -40,13 +47,15 @@ type SavedSkill = {
   updatedAt: number;
 };
 
-type MockChatMessage = {
-  content: string;
-  id: string;
-  role: "assistant" | "user";
-};
-
 type ViewMode = "editor" | "raw" | "rich";
+
+type SkillAgentSnapshot = {
+  allowedTools: string;
+  name: string;
+  parseError?: string;
+  tokens: number;
+  validationErrors: string[];
+};
 
 const MAX_SKILL_NAME_LENGTH = 64;
 const MAX_DESCRIPTION_LENGTH = 1024;
@@ -87,40 +96,31 @@ function App() {
   const [savedContent, setSavedContent] = useState(() => assembleSkillContent(defaultSkill));
   const [storageMessage, setStorageMessage] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("editor");
-  const [mockMessages, setMockMessages] = useState<MockChatMessage[]>(() =>
-    createInitialMockMessages(defaultSkill),
-  );
   const [copied, setCopied] = useState<"content" | null>(null);
 
   const content = useMemo(() => assembleSkillContent(formData), [formData]);
   const parsed = useMemo(() => parseContent(content), [content]);
   const validationErrors = useMemo(() => validateSkillContent(content), [content]);
-  const promptPreview = useMemo(() => {
-    if (!parsed.ok) return "";
-    return toPrompt([{ content, location: "playground/SKILL.md" }]);
-  }, [content, parsed.ok]);
   const tokenEstimate = useMemo(() => estimateTokens(content), [content]);
   const hasChanges = content !== savedContent;
   const isValid = parsed.ok && validationErrors.length === 0;
+  const skillAgent = useMemo(
+    () =>
+      new BrowserSkillAgent(() => ({
+        allowedTools: formData.allowedTools,
+        name: formData.name,
+        parseError: parsed.ok ? undefined : parsed.error,
+        tokens: tokenEstimate,
+        validationErrors,
+      })),
+    [formData.allowedTools, formData.name, parsed, tokenEstimate, validationErrors],
+  );
 
   const resetSkill = useCallback(() => {
     setFormData(defaultSkill);
     setSavedContent(assembleSkillContent(defaultSkill));
     setStorageMessage(null);
-    setMockMessages(createInitialMockMessages(defaultSkill));
   }, []);
-
-  const validateInBrowser = useCallback(() => {
-    const result = {
-      bodyLength: parsed.ok ? parsed.body.length : undefined,
-      error: parsed.ok ? undefined : parsed.error,
-      ok: parsed.ok && validationErrors.length === 0,
-      properties: parsed.ok ? parsed.properties : undefined,
-      tokens: tokenEstimate,
-      validationErrors,
-    };
-    return result;
-  }, [parsed, tokenEstimate, validationErrors]);
 
   const saveSnapshot = useCallback(async () => {
     const record = createSavedSkillRecord(content, formData);
@@ -134,19 +134,6 @@ function App() {
     setCopied("content");
     window.setTimeout(() => setCopied(null), 1200);
   }, [content]);
-
-  const runMockAgent = useCallback(() => {
-    const result = validateInBrowser();
-    setMockMessages(
-      createMockAgentMessages(
-        formData,
-        content,
-        promptPreview,
-        result.validationErrors,
-        result.error,
-      ),
-    );
-  }, [content, formData, promptPreview, validateInBrowser]);
 
   return (
     <main className="flex h-dvh min-h-dvh flex-col overflow-hidden bg-background text-foreground">
@@ -193,10 +180,6 @@ function App() {
             >
               <Copy size={15} />
               <span className="hidden sm:inline">{copied === "content" ? "Copied" : "Copy"}</span>
-            </button>
-            <button className={buttonClass()} type="button" onClick={runMockAgent}>
-              <Play size={16} />
-              Run
             </button>
           </div>
         </div>
@@ -261,24 +244,22 @@ function App() {
           </div>
         </section>
 
-        <section
-          className="flex min-h-0 min-w-0 flex-col border-t bg-background lg:border-l lg:border-t-0"
-          aria-label="CopilotKit mock agent"
-        >
-          <div
-            className="grid min-h-0 min-w-0 flex-1 content-end gap-5 overflow-auto px-4 py-5 sm:px-5"
-            aria-label="Mock CopilotKit chat transcript"
-          >
-            {mockMessages.map((message) => (
-              <div className={mockMessageClass(message.role)} key={message.id}>
-                <div className="flex w-full min-w-0 max-w-full flex-col gap-2 overflow-hidden break-words text-sm leading-6 [overflow-wrap:anywhere] group-[.is-user]:ml-auto group-[.is-user]:w-fit group-[.is-user]:rounded-lg group-[.is-user]:bg-secondary group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground [&_*]:min-w-0 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:break-words [&_pre]:max-w-full [&_pre]:overflow-auto [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_pre]:rounded-md [&_pre]:bg-muted/70 [&_pre]:p-3 [&_pre_code]:!whitespace-pre-wrap [&_pre_div]:!max-w-full [&_pre_div]:!whitespace-pre-wrap [&_pre_div]:!break-words [&_ul]:ml-5 [&_ul]:list-disc">
-                  <Markdown content={message.content} />
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="shrink-0 border-t p-4 sm:p-5">
-            <div className="min-h-11 rounded-lg border bg-muted/30" aria-label="LLM mock input" />
+        <section className="min-h-0 min-w-0 border-t bg-background lg:border-l lg:border-t-0">
+          <div className="h-full min-h-0 w-full">
+            <CopilotKitProvider
+              agents__unsafe_dev_only={{ "skill-agent": skillAgent }}
+              showDevConsole={false}
+            >
+              <CopilotChat
+                agentId="skill-agent"
+                className="h-full min-h-0 w-full"
+                labels={{
+                  chatInputPlaceholder: "Ask the agent to use this skill...",
+                  chatDisclaimerText: "",
+                  welcomeMessageText: "Ask the agent to use the current skill.",
+                }}
+              />
+            </CopilotKitProvider>
           </div>
         </section>
       </section>
@@ -614,10 +595,99 @@ function previewButtonClass(active: boolean): string {
   ].join(" ");
 }
 
-function mockMessageClass(role: MockChatMessage["role"]): string {
-  const base = "group flex w-full min-w-0 max-w-full flex-col gap-2";
-  if (role === "user") return `${base} is-user ml-auto justify-end`;
-  return `${base} is-assistant`;
+class BrowserSkillAgent extends AbstractAgent {
+  constructor(private readonly getSnapshot: () => SkillAgentSnapshot) {
+    super({
+      agentId: "skill-agent",
+      description: "Browser-local mock agent for the agent-skills-ts-sdk playground.",
+    });
+  }
+
+  clone(): BrowserSkillAgent {
+    return new BrowserSkillAgent(this.getSnapshot);
+  }
+
+  async detachActiveRun(): Promise<void> {}
+
+  run(_input: RunAgentInput): Observable<BaseEvent> {
+    return new Observable<BaseEvent>((observer) => {
+      const snapshot = this.getSnapshot();
+      const messageId = `assistant_${Date.now()}`;
+      const toolCallId = `skill_${Date.now()}`;
+      const args = JSON.stringify({
+        location: "playground/SKILL.md",
+        name: snapshot.name,
+      });
+      const toolResult = JSON.stringify(
+        snapshot.parseError || snapshot.validationErrors.length > 0
+          ? {
+              errors: [snapshot.parseError, ...snapshot.validationErrors].filter(Boolean),
+              name: snapshot.name,
+              ok: false,
+            }
+          : {
+              allowedTools: snapshot.allowedTools || null,
+              name: snapshot.name,
+              ok: true,
+              tokens: snapshot.tokens,
+            },
+      );
+      const response = [
+        snapshot.parseError || snapshot.validationErrors.length > 0
+          ? `The current skill is not ready to use.`
+          : `I loaded \`${snapshot.name}\` and would activate it for this task.`,
+        "",
+        `Allowed tools: \`${snapshot.allowedTools || "none"}\`.`,
+        `Token estimate: ${snapshot.tokens}.`,
+      ].join("\n");
+
+      const events: BaseEvent[] = [
+        { type: EventType.RUN_STARTED },
+        {
+          delta: "Reading the current skill.",
+          messageId,
+          type: EventType.TEXT_MESSAGE_CHUNK,
+        },
+        {
+          delta: args,
+          parentMessageId: messageId,
+          toolCallId,
+          toolCallName: "read_skill",
+          type: EventType.TOOL_CALL_CHUNK,
+        },
+        {
+          content: toolResult,
+          messageId: `${messageId}_tool_result`,
+          toolCallId,
+          type: EventType.TOOL_CALL_RESULT,
+        },
+        {
+          delta: `\n\n${response}`,
+          messageId,
+          type: EventType.TEXT_MESSAGE_CHUNK,
+        },
+        { type: EventType.RUN_FINISHED },
+      ] as BaseEvent[];
+
+      let index = 0;
+      const emitNext = () => {
+        const event = events[index];
+        if (!event) {
+          observer.complete();
+          return;
+        }
+        observer.next(event);
+        index += 1;
+        window.setTimeout(emitNext, index < 4 ? 120 : 24);
+      };
+
+      emitNext();
+
+      return () => {
+        observer.complete();
+      };
+    });
+  }
 }
 
 function SkillVisual({
@@ -844,59 +914,6 @@ function createSavedSkillRecord(content: string, fallback: SkillFormData): Saved
     tokens: estimateTokens(content),
     updatedAt: Date.now(),
   };
-}
-
-function createInitialMockMessages(skill: SkillFormData): MockChatMessage[] {
-  return [
-    {
-      content: `Use \`${skill.name}\`.`,
-      id: "user-initial",
-      role: "user",
-    },
-  ];
-}
-
-function createMockAgentMessages(
-  skill: SkillFormData,
-  content: string,
-  promptPreview: string,
-  validationErrors: string[],
-  parseError?: string,
-): MockChatMessage[] {
-  const parsed = parseContent(content);
-  const toolSummary =
-    parsed.ok && validationErrors.length === 0
-      ? `read_skill(${skill.name})`
-      : [
-          `read_skill(${skill.name}) failed.`,
-          parseError ? `Parser error: ${parseError}` : null,
-          validationErrors.length > 0 ? `Validation errors: ${validationErrors.join("; ")}` : null,
-        ]
-          .filter(Boolean)
-          .join("\n");
-
-  return [
-    {
-      content: `Use \`${skill.name}\` for README work.`,
-      id: "user-run",
-      role: "user",
-    },
-    {
-      content: [
-        toolSummary,
-        "",
-        "```xml",
-        promptPreview || "<available_skills />",
-        "```",
-        "",
-        `Activated **${skill.name}**.`,
-        `Description: ${skill.description}`,
-        `Allowed tools: ${skill.allowedTools || "none"}`,
-      ].join("\n"),
-      id: "assistant-run",
-      role: "assistant",
-    },
-  ];
 }
 
 async function putSavedSkill(skill: SavedSkill): Promise<void> {
