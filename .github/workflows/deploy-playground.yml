@@ -44,10 +44,10 @@ jobs:
         run: vp install --frozen-lockfile
 
       - name: Build playground
-        run: pnpm --dir playground build
+        run: cd playground && vp build
 
       - name: Dry-run generated Worker deploy
-        run: pnpm --dir playground exec wrangler deploy --dry-run --config dist/agent_skills_ts_sdk_playground/wrangler.json
+        run: cd playground && vp exec wrangler deploy --dry-run --config dist/agent_skills_ts_sdk_playground/wrangler.json
 
       - name: Deploy generated Worker
         uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
