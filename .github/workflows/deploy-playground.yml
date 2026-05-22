@@ -1,0 +1,60 @@
+name: Deploy Playground
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/deploy-playground.yml"
+      - "playground/**"
+      - "src/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "vite.config.ts"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy playground Worker
+    if: github.repository == vars.RELEASE_REPOSITORY
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Vite+
+        uses: voidzero-dev/setup-vp@ca1c46663915d6c1042ae23bd39ab85718bfb0fa # v1.10.0
+        with:
+          node-version: "24"
+          cache: true
+
+      - name: Install dependencies
+        run: vp install --frozen-lockfile
+
+      - name: Build playground
+        run: pnpm --dir playground build
+
+      - name: Dry-run generated Worker deploy
+        run: pnpm --dir playground exec wrangler deploy --dry-run --config dist/agent_skills_ts_sdk_playground/wrangler.json
+
+      - name: Deploy generated Worker
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
+        with:
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: deploy --config dist/agent_skills_ts_sdk_playground/wrangler.json
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          workingDirectory: playground
+          wranglerVersion: "4"
