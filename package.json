@@ -54,7 +54,7 @@
     "dev": "vp pack --watch",
     "playground:build": "cd playground && vp build",
     "playground:dev": "pnpm --dir playground dev",
-    "playground:deploy:dry-run": "cd playground && vp exec wrangler deploy --dry-run --config dist/agent_skills_ts_sdk_playground/wrangler.json",
+    "playground:worker:dry-run": "cd playground && vp exec wrangler deploy --dry-run --config dist/agent_skills_ts_sdk_playground/wrangler.json",
     "playground:preview": "pnpm --dir playground preview",
     "test": "vp test",
     "test:run": "vp test run",
