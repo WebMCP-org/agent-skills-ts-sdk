@@ -1,5 +1,13 @@
 # agent-skills-ts-sdk
 
+## 2.3.3
+
+### Patch Changes
+
+- Add an AgentSkills reference lock and CI drift check for the upstream specification and Python `skills-ref` package.
+- Align parser, validator, disclosure, and patch behavior with the pinned AgentSkills reference.
+- Document intentional conformance divergences for stricter SDK validation behavior.
+
 ## 2.3.1
 
 ## 2.3.0
