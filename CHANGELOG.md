@@ -1,5 +1,11 @@
 # agent-skills-ts-sdk
 
+## 2.4.1
+
+### Patch Changes
+
+- a1faac9: Replace resource-link regular expressions with linear parsers to avoid pathological backtracking on untrusted skill bodies.
+
 ## 2.4.0
 
 ### Minor Changes
