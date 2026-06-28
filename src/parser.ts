@@ -26,16 +26,41 @@ const FRONTMATTER_DELIMITER_LENGTH = FRONTMATTER_DELIMITER.length;
 const FIELD_NAME = "name";
 const FIELD_DESCRIPTION = "description";
 const FIELD_METADATA = "metadata";
+const FIELD_LICENSE = "license";
+const FIELD_COMPATIBILITY = "compatibility";
+const FIELD_ALLOWED_TOOLS = "allowed-tools";
+const SCALAR_SOURCE_FIELDS = [
+  FIELD_NAME,
+  FIELD_DESCRIPTION,
+  FIELD_LICENSE,
+  FIELD_COMPATIBILITY,
+  FIELD_ALLOWED_TOOLS,
+] as const;
 const UTF8_BOM = "\uFEFF";
 const INPUT_MODE_STRICT = "strict";
 const INPUT_MODE_EMBEDDED = "embedded";
 const RESOURCE_DEDUPE_SEPARATOR = "\u0000";
-const RESOURCE_PATH_SEGMENTS = new Set(["scripts", "references", "assets"]);
-const CHAR_OPEN_BRACKET = "[";
-const CHAR_CLOSE_BRACKET = "]";
+const RESOURCE_PATH_SEGMENTS = new Set([
+  "scripts",
+  "references",
+  "assets",
+  "lib",
+  "reference",
+  "templates",
+  "shared",
+  "curl",
+  "examples",
+  "rules",
+  "agents",
+  "eval-viewer",
+]);
+const MARKDOWN_RESOURCE_LINK_PATTERN = /\[([^\]\n]+)\]\(([^)\n]+)\)/g;
+const BARE_RESOURCE_PATH_PATTERN =
+  /(?:\.\/)*(?:scripts|references|assets|lib|reference|templates|shared|curl|examples|rules|agents|eval-viewer)\/[^\s`<>"')\]}]+/g;
+const BARE_RESOURCE_TRAILING_PUNCTUATION = /[.,;:!*]+$/;
+const BARE_RESOURCE_PATH_PREFIX_PATTERN = /[\p{L}\p{N}_-]/u;
+const ROOT_RESOURCE_FILE_PATTERN = /^[^/.][^/]*\.[^/.]+$/;
 const CHAR_OPEN_PAREN = "(";
-const CHAR_CLOSE_PAREN = ")";
-const CHAR_NEWLINE = "\n";
 const URL_SCHEME_PATTERN = /^[a-zA-Z][a-zA-Z\d+\-.]*:/;
 
 /**
@@ -90,16 +115,6 @@ const isMetadataMap = <TMetadata extends SkillMetadataMap>(value: unknown): valu
 };
 
 /**
- * Extracts an optional string field from raw YAML frontmatter.
- *
- * @param value - Candidate value.
- * @returns The string value when present, otherwise `undefined`.
- */
-const optionalString = (value: unknown): string | undefined => {
-  return isString(value) ? value : undefined;
-};
-
-/**
  * Parses markdown link URLs that may include optional quoted title text.
  *
  * @param rawPath - Raw link target from markdown.
@@ -111,6 +126,66 @@ const stripMarkdownLinkTitle = (rawPath: string): string => {
   return spaceIndex === -1 ? trimmed : trimmed.slice(0, spaceIndex);
 };
 
+const stripBareResourceTrailingPunctuation = (rawPath: string): string => {
+  return rawPath.replace(BARE_RESOURCE_TRAILING_PUNCTUATION, "");
+};
+
+const hasBareResourcePathBoundary = (body: SkillBody, start: number): boolean => {
+  if (start <= 0) {
+    return true;
+  }
+
+  const previous = body[start - 1];
+  if (previous === undefined) {
+    return true;
+  }
+
+  return (
+    previous !== "." &&
+    previous !== "/" &&
+    previous !== CHAR_OPEN_PAREN &&
+    previous !== "\\" &&
+    !BARE_RESOURCE_PATH_PREFIX_PATTERN.test(previous)
+  );
+};
+
+const removeResourcePathSuffix = (path: string): string => {
+  const queryIndex = path.indexOf("?");
+  const hashIndex = path.indexOf("#");
+  const cutoff = Math.min(
+    path.length,
+    queryIndex === -1 ? path.length : queryIndex,
+    hashIndex === -1 ? path.length : hashIndex,
+  );
+
+  return path.slice(0, cutoff);
+};
+
+const hasInvalidResourcePathShape = (path: string): boolean =>
+  !path ||
+  path.includes("\\") ||
+  path.endsWith("/") ||
+  path.includes("//") ||
+  path.startsWith("../");
+
+const isUnsupportedResourceTarget = (path: string): boolean =>
+  !path || path.startsWith("/") || path.startsWith("#") || URL_SCHEME_PATTERN.test(path);
+
+const normalizeResourcePathText = (path: string): string => {
+  let normalized = removeResourcePathSuffix(path);
+  while (normalized.startsWith("./")) {
+    normalized = normalized.slice(2);
+  }
+  return normalized;
+};
+
+const isAllowedNestedResourcePath = (segments: string[]): boolean => {
+  if (segments.length < 2 || !RESOURCE_PATH_SEGMENTS.has(segments[0] ?? "")) {
+    return false;
+  }
+  return segments.every((segment) => segment !== "." && segment !== "..");
+};
+
 /**
  * Normalizes and validates a markdown link path as a skill resource path.
  *
@@ -118,51 +193,21 @@ const stripMarkdownLinkTitle = (rawPath: string): string => {
  * @returns Canonical resource path or `null` when invalid.
  */
 const normalizeResourcePath = (path: string): string | null => {
-  if (!path || path.startsWith("/")) {
+  if (isUnsupportedResourceTarget(path)) {
     return null;
   }
 
-  if (path.startsWith("#")) {
-    return null;
-  }
-
-  if (URL_SCHEME_PATTERN.test(path)) {
-    return null;
-  }
-
-  let cutoff = path.length;
-  const queryIndex = path.indexOf("?");
-  if (queryIndex !== -1 && queryIndex < cutoff) {
-    cutoff = queryIndex;
-  }
-  const hashIndex = path.indexOf("#");
-  if (hashIndex !== -1 && hashIndex < cutoff) {
-    cutoff = hashIndex;
-  }
-
-  let normalized = path.slice(0, cutoff);
-  while (normalized.startsWith("./")) {
-    normalized = normalized.slice(2);
-  }
-
-  if (!normalized || normalized.includes("\\")) {
-    return null;
-  }
-
-  if (normalized.startsWith("../")) {
+  const normalized = normalizeResourcePathText(path);
+  if (hasInvalidResourcePathShape(normalized)) {
     return null;
   }
 
   const segments = normalized.split("/").filter(Boolean);
-  if (segments.length === 0) {
-    return null;
+  if (segments.length === 1) {
+    return ROOT_RESOURCE_FILE_PATTERN.test(normalized) ? normalized : null;
   }
 
-  if (!RESOURCE_PATH_SEGMENTS.has(segments[0] ?? "")) {
-    return null;
-  }
-
-  if (!segments.every((segment) => segment !== "." && segment !== "..")) {
+  if (!isAllowedNestedResourcePath(segments)) {
     return null;
   }
 
@@ -199,17 +244,43 @@ const normalizeContentForMode = (
 const readRequiredTrimmedString = (
   metadata: Record<string, unknown>,
   field: keyof Pick<SkillFrontmatter, "name" | "description">,
+  sourceStrings: Partial<Record<(typeof SCALAR_SOURCE_FIELDS)[number], string>>,
 ): string => {
   if (!(field in metadata)) {
     throw new ValidationError(`Missing required field in frontmatter: ${field}`);
   }
 
-  const value = metadata[field];
+  const value = sourceStrings[field] ?? metadata[field];
   if (!isString(value) || !value.trim()) {
     throw new ValidationError(`Field '${field}' must be a non-empty string`);
   }
 
   return value.trim();
+};
+
+/**
+ * Validates and reads an optional string frontmatter field.
+ *
+ * @param metadata - Parsed frontmatter object.
+ * @param field - Optional field name.
+ * @returns String value when present, otherwise `undefined`.
+ * @throws {ValidationError} If the field is present and not a string.
+ */
+const readOptionalString = (
+  metadata: Record<string, unknown>,
+  field: typeof FIELD_LICENSE | typeof FIELD_COMPATIBILITY | typeof FIELD_ALLOWED_TOOLS,
+  sourceStrings: Partial<Record<(typeof SCALAR_SOURCE_FIELDS)[number], string>>,
+): string | undefined => {
+  if (!(field in metadata)) {
+    return undefined;
+  }
+
+  const value = sourceStrings[field] ?? metadata[field];
+  if (!isString(value)) {
+    throw new ValidationError(`Field '${field}' must be a string`);
+  }
+
+  return value;
 };
 
 /**
@@ -222,10 +293,11 @@ const readRequiredTrimmedString = (
 const toSkillFrontmatter = <TMetadata extends SkillMetadataMap>(
   metadataObject: Record<string, unknown>,
   metadataMap: SkillMetadataMap | null,
+  sourceStrings: Partial<Record<(typeof SCALAR_SOURCE_FIELDS)[number], string>>,
 ): SkillFrontmatter<TMetadata> & Record<string, unknown> => {
   const normalizedFrontmatter: SkillFrontmatter<TMetadata> = {
-    name: readRequiredTrimmedString(metadataObject, FIELD_NAME),
-    description: readRequiredTrimmedString(metadataObject, FIELD_DESCRIPTION),
+    name: readRequiredTrimmedString(metadataObject, FIELD_NAME, sourceStrings),
+    description: readRequiredTrimmedString(metadataObject, FIELD_DESCRIPTION, sourceStrings),
   };
 
   const frontmatter: SkillFrontmatter<TMetadata> & Record<string, unknown> = {
@@ -233,17 +305,17 @@ const toSkillFrontmatter = <TMetadata extends SkillMetadataMap>(
     ...normalizedFrontmatter,
   };
 
-  const license = optionalString(metadataObject.license);
+  const license = readOptionalString(metadataObject, FIELD_LICENSE, sourceStrings);
   if (license !== undefined) {
     frontmatter.license = license;
   }
 
-  const compatibility = optionalString(metadataObject.compatibility);
+  const compatibility = readOptionalString(metadataObject, FIELD_COMPATIBILITY, sourceStrings);
   if (compatibility !== undefined) {
     frontmatter.compatibility = compatibility;
   }
 
-  const allowedTools = optionalString(metadataObject["allowed-tools"]);
+  const allowedTools = readOptionalString(metadataObject, FIELD_ALLOWED_TOOLS, sourceStrings);
   if (allowedTools !== undefined) {
     frontmatter["allowed-tools"] = allowedTools;
   }
@@ -264,16 +336,8 @@ const toSkillFrontmatter = <TMetadata extends SkillMetadataMap>(
 const formatMetadataScalar = (value: Scalar): string => {
   const scalarValue = value.value;
 
-  if (typeof scalarValue === "number") {
-    return typeof value.source === "string" ? value.source : String(scalarValue);
-  }
-
-  if (typeof scalarValue === "boolean") {
-    return scalarValue ? "True" : "False";
-  }
-
-  if (scalarValue === null) {
-    return "None";
+  if (typeof scalarValue !== "string" && typeof value.source === "string") {
+    return value.source;
   }
 
   if (typeof scalarValue === "string") {
@@ -295,40 +359,87 @@ const extractMetadataStringMap = (document: Document.Parsed): SkillMetadataMap |
     return null;
   }
 
-  let metadataPair: (typeof root.items)[number] | undefined;
-  for (const pair of root.items) {
-    if (isScalarNode(pair.key) && pair.key.value === FIELD_METADATA) {
-      metadataPair = pair;
-      break;
-    }
-  }
-
-  if (!metadataPair || !isMapNode(metadataPair.value)) {
+  const metadataPair = findMetadataPair(root);
+  if (!metadataPair) {
     return null;
   }
-
-  const entries: Array<[string, string]> = [];
-  for (const item of metadataPair.value.items) {
-    if (!isScalarNode(item.key)) {
-      continue;
-    }
-    const key = String(item.key.value);
-    const valueNode = item.value;
-
-    if (valueNode === null) {
-      entries.push([key, ""]);
-      continue;
-    }
-
-    if (isScalarNode(valueNode)) {
-      entries.push([key, formatMetadataScalar(valueNode)]);
-      continue;
-    }
-
-    entries.push([key, String(valueNode.toJSON())]);
+  if (!isMapNode(metadataPair.value)) {
+    throw new ValidationError("Field 'metadata' must be a YAML mapping");
   }
 
-  return entriesToRecord(entries);
+  return entriesToRecord(metadataPair.value.items.map(metadataItemToStringEntry));
+};
+
+const findFrontmatterPair = (
+  root: YAMLMap,
+  field: string,
+): (typeof root.items)[number] | undefined => {
+  for (const pair of root.items) {
+    if (isScalarNode(pair.key) && pair.key.value === field) {
+      return pair;
+    }
+  }
+  return undefined;
+};
+
+const findMetadataPair = (root: YAMLMap): (typeof root.items)[number] | undefined =>
+  findFrontmatterPair(root, FIELD_METADATA);
+
+const extractFrontmatterScalarSourceStrings = (
+  document: Document.Parsed,
+): Partial<Record<(typeof SCALAR_SOURCE_FIELDS)[number], string>> => {
+  const root = document.contents;
+  if (!isMapNode(root)) {
+    return {};
+  }
+
+  const sourceStrings: Partial<Record<(typeof SCALAR_SOURCE_FIELDS)[number], string>> = {};
+  for (const field of SCALAR_SOURCE_FIELDS) {
+    const value = findFrontmatterPair(root, field)?.value;
+    if (isScalarNode(value)) {
+      sourceStrings[field] = formatMetadataScalar(value);
+    }
+  }
+  return sourceStrings;
+};
+
+const metadataItemToStringEntry = (item: YAMLMap["items"][number]): [string, string] => {
+  if (!isScalarNode(item.key)) {
+    throw new ValidationError("Field 'metadata' must contain scalar keys");
+  }
+  if (typeof item.key.value !== "string") {
+    throw new ValidationError("Field 'metadata' must contain string keys");
+  }
+
+  if (item.value === null) {
+    return [item.key.value, ""];
+  }
+
+  if (!isScalarNode(item.value)) {
+    throw new ValidationError("Field 'metadata' must contain scalar values");
+  }
+
+  return [item.key.value, formatMetadataScalar(item.value)];
+};
+
+const hasUnsupportedStrictYamlFeature = (document: Document.Parsed): boolean => {
+  let unsupported = false;
+  const reject = (): symbol => {
+    unsupported = true;
+    return YAML.visit.BREAK;
+  };
+
+  YAML.visit(document, {
+    Alias: reject,
+    Collection: (_key, node) =>
+      node.flow === true || typeof node.anchor === "string" || typeof node.tag === "string"
+        ? reject()
+        : undefined,
+    Scalar: (_key, node) =>
+      typeof node.anchor === "string" || typeof node.tag === "string" ? reject() : undefined,
+  });
+
+  return unsupported;
 };
 
 /**
@@ -461,14 +572,74 @@ export type ParseFrontmatterInputMode = typeof INPUT_MODE_STRICT | typeof INPUT_
 export interface ResourceLink {
   /** Display identifier from markdown link text. */
   name: SkillResource["name"];
-  /** Canonical resource path under scripts/, references/, or assets/. */
+  /** Canonical resource path under an observed skill-local resource directory. */
   path: SkillResource["path"];
 }
+
+const appendResourceLink = (
+  links: ResourceLink[],
+  dedupe: Set<string>,
+  name: SkillResource["name"],
+  path: SkillResource["path"],
+): boolean => {
+  const dedupeKey = `${name}${RESOURCE_DEDUPE_SEPARATOR}${path}`;
+  if (dedupe.has(dedupeKey)) {
+    return false;
+  }
+
+  dedupe.add(dedupeKey);
+  links.push({ name, path });
+  return true;
+};
+
+const collectMarkdownResourceLinks = (
+  body: SkillBody,
+  links: ResourceLink[],
+  dedupe: Set<string>,
+): Set<string> => {
+  const linkedPaths = new Set<string>();
+
+  for (const match of body.matchAll(MARKDOWN_RESOURCE_LINK_PATTERN)) {
+    const rawName = match[1]?.trim() ?? "";
+    const rawPath = match[2] ?? "";
+    const normalizedPath = normalizeResourcePath(stripMarkdownLinkTitle(rawPath));
+    if (!rawName || !normalizedPath) {
+      continue;
+    }
+
+    if (appendResourceLink(links, dedupe, rawName, normalizedPath)) {
+      linkedPaths.add(normalizedPath);
+    }
+  }
+
+  return linkedPaths;
+};
+
+const collectBareResourceLinks = (
+  body: SkillBody,
+  links: ResourceLink[],
+  dedupe: Set<string>,
+  linkedPaths: Set<string>,
+): void => {
+  for (const match of body.matchAll(BARE_RESOURCE_PATH_PATTERN)) {
+    const start = match.index ?? -1;
+    const normalizedPath = normalizeResourcePath(stripBareResourceTrailingPunctuation(match[0]));
+    if (
+      !hasBareResourcePathBoundary(body, start) ||
+      !normalizedPath ||
+      linkedPaths.has(normalizedPath)
+    ) {
+      continue;
+    }
+
+    appendResourceLink(links, dedupe, normalizedPath, normalizedPath);
+  }
+};
 
 /**
  * Extracts tier-3 resource links from skill body markdown.
  *
- * Only links to `scripts/*`, `references/*`, and `assets/*` are returned.
+ * Only links to observed skill-local resource directories are returned.
  * External URLs, anchors, and path traversal references are ignored.
  * Leading `./` is accepted and normalized away.
  *
@@ -478,79 +649,8 @@ export interface ResourceLink {
 export function extractResourceLinks(body: SkillBody): ResourceLink[] {
   const links: ResourceLink[] = [];
   const dedupe = new Set<string>();
-  let index = 0;
-
-  while (index < body.length) {
-    if (body[index] !== CHAR_OPEN_BRACKET) {
-      index += 1;
-      continue;
-    }
-
-    const nameStart = index + 1;
-    let nameEnd = nameStart;
-    while (
-      nameEnd < body.length &&
-      body[nameEnd] !== CHAR_CLOSE_BRACKET &&
-      body[nameEnd] !== CHAR_NEWLINE
-    ) {
-      nameEnd += 1;
-    }
-
-    if (nameEnd >= body.length) {
-      break;
-    }
-
-    const hasValidName = body[nameEnd] === CHAR_CLOSE_BRACKET && nameEnd > nameStart;
-    const hasPathOpen = body[nameEnd + 1] === CHAR_OPEN_PAREN;
-
-    if (!hasValidName || !hasPathOpen) {
-      index = nameEnd + 1;
-      continue;
-    }
-
-    const pathStart = nameEnd + 2;
-    let pathEnd = pathStart;
-    while (
-      pathEnd < body.length &&
-      body[pathEnd] !== CHAR_CLOSE_PAREN &&
-      body[pathEnd] !== CHAR_NEWLINE
-    ) {
-      pathEnd += 1;
-    }
-
-    if (pathEnd >= body.length) {
-      break;
-    }
-
-    if (body[pathEnd] !== CHAR_CLOSE_PAREN) {
-      index = pathEnd + 1;
-      continue;
-    }
-
-    const rawName = body.slice(nameStart, nameEnd).trim();
-    const rawPath = body.slice(pathStart, pathEnd);
-    if (!rawName || !rawPath) {
-      index = pathEnd + 1;
-      continue;
-    }
-
-    const normalizedPath = normalizeResourcePath(stripMarkdownLinkTitle(rawPath));
-    if (!normalizedPath) {
-      index = pathEnd + 1;
-      continue;
-    }
-
-    const dedupeKey = `${rawName}${RESOURCE_DEDUPE_SEPARATOR}${normalizedPath}`;
-    if (dedupe.has(dedupeKey)) {
-      index = pathEnd + 1;
-      continue;
-    }
-
-    dedupe.add(dedupeKey);
-    links.push({ name: rawName, path: normalizedPath });
-    index = pathEnd + 1;
-  }
-
+  const linkedPaths = collectMarkdownResourceLinks(body, links, dedupe);
+  collectBareResourceLinks(body, links, dedupe, linkedPaths);
   return links;
 }
 
@@ -611,6 +711,14 @@ export function parseFrontmatter<TMetadata extends SkillMetadataMap = SkillMetad
     throw new ParseError(`Invalid YAML in frontmatter: ${errorMessage}`);
   }
 
+  if (hasUnsupportedStrictYamlFeature(document)) {
+    throw new ParseError(
+      "Invalid YAML in frontmatter: flow collections, anchors, aliases, and tags are not supported",
+    );
+  }
+
+  const metadataMap = extractMetadataStringMap(document);
+  const sourceStrings = extractFrontmatterScalarSourceStrings(document);
   const rawMetadata = document.toJSON();
 
   if (!isRecord(rawMetadata)) {
@@ -618,12 +726,11 @@ export function parseFrontmatter<TMetadata extends SkillMetadataMap = SkillMetad
   }
 
   const metadataObject = rawMetadata;
-  const metadataMap =
-    FIELD_METADATA in metadataObject && isRecord(metadataObject[FIELD_METADATA])
-      ? extractMetadataStringMap(document)
-      : null;
 
-  return { metadata: toSkillFrontmatter<TMetadata>(metadataObject, metadataMap), body };
+  return {
+    metadata: toSkillFrontmatter<TMetadata>(metadataObject, metadataMap, sourceStrings),
+    body,
+  };
 }
 
 /**

@@ -325,19 +325,19 @@ export function skillPropertiesToDict<TMetadata extends SkillMetadataMap = Skill
     description: props.description,
   };
 
-  if (props.license !== undefined) {
+  if (props.license != null) {
     result.license = props.license;
   }
 
-  if (props.compatibility !== undefined) {
+  if (props.compatibility != null) {
     result.compatibility = props.compatibility;
   }
 
-  if (props.allowedTools !== undefined) {
+  if (props.allowedTools != null) {
     result["allowed-tools"] = props.allowedTools;
   }
 
-  if (props.metadata && Object.keys(props.metadata).length > 0) {
+  if (props.metadata != null && Object.keys(props.metadata).length > 0) {
     result.metadata = props.metadata;
   }
 

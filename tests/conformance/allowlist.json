@@ -1,4 +1,20 @@
 {
   "_comment": "Intentional divergences from skills-ref behavior. Empty = full parity.",
-  "divergences": []
+  "divergences": [
+    {
+      "area": "validator",
+      "behavior": "Reject empty compatibility strings, non-scalar optional frontmatter fields, nested metadata values, and non-string metadata keys.",
+      "reason": "The official Agent Skills specification requires compatibility to be 1-500 characters when present and defines license, allowed-tools, and metadata as a string key-value map. The Python skills-ref validator is currently looser for these optional fields."
+    },
+    {
+      "area": "prompt",
+      "behavior": "Escape XML-sensitive characters in location values.",
+      "reason": "The Python skills-ref prompt builder escapes name and description but writes filesystem locations raw. This SDK keeps prompt XML well-formed for storage-agnostic host-provided locations."
+    },
+    {
+      "area": "parser",
+      "behavior": "Return trimmed required name and description values from parseFrontmatter.",
+      "reason": "The Python parse_frontmatter helper returns raw required field whitespace, then read_properties trims. This SDK exposes parsed frontmatter as the normalized public shape, matching read_properties and the documented parsing rules."
+    }
+  ]
 }

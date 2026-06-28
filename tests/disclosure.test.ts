@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { handleSkillRead, toReadToolSchema } from "../src/disclosure";
+import type { SkillReadArgs } from "../src/disclosure";
 import type { ResolvedSkill } from "../src/models";
 
 const skillFixture: ResolvedSkill = {
@@ -47,6 +48,42 @@ describe("handleSkillRead", () => {
     });
   });
 
+  it("returns structured error for malformed tool arguments", () => {
+    const result = handleSkillRead([skillFixture], null as unknown as SkillReadArgs);
+
+    expect(result).toEqual({
+      ok: false,
+      code: "INVALID_ARGUMENT",
+      error: 'Field "name" must be a string.',
+    });
+  });
+
+  it("returns structured error for malformed resource argument", () => {
+    const result = handleSkillRead([skillFixture], {
+      name: "pizza-maker",
+      resource: 42,
+    } as unknown as SkillReadArgs);
+
+    expect(result).toEqual({
+      ok: false,
+      code: "INVALID_ARGUMENT",
+      error: 'Field "resource" must be a string when provided.',
+    });
+  });
+
+  it("returns structured error for unexpected tool arguments", () => {
+    const result = handleSkillRead([skillFixture], {
+      name: "pizza-maker",
+      extra: true,
+    } as unknown as SkillReadArgs);
+
+    expect(result).toEqual({
+      ok: false,
+      code: "INVALID_ARGUMENT",
+      error: "Unexpected fields in read arguments: extra.",
+    });
+  });
+
   it("returns structured error when resource does not exist", () => {
     const result = handleSkillRead([skillFixture], {
       name: "pizza-maker",
@@ -57,6 +94,19 @@ describe("handleSkillRead", () => {
       ok: false,
       code: "RESOURCE_NOT_FOUND",
       error: 'Resource "missing-resource" not found in skill "pizza-maker".',
+    });
+  });
+
+  it("returns structured error when an empty resource name is provided", () => {
+    const result = handleSkillRead([skillFixture], {
+      name: "pizza-maker",
+      resource: "",
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      code: "RESOURCE_NOT_FOUND",
+      error: 'Resource "" not found in skill "pizza-maker".',
     });
   });
 });

@@ -23,6 +23,17 @@ describe("validateSkillProperties", () => {
     expect(errors).toEqual([]);
   });
 
+  it("should reject non-string expectedName option", () => {
+    const properties = {
+      name: "my-skill",
+      description: "A test skill",
+    };
+    const errors = validateSkillProperties(properties, {
+      expectedName: 123 as unknown as string,
+    });
+    expect(errors).toContain("Field 'expectedName' must be a string");
+  });
+
   it("should reject uppercase name", () => {
     const properties = {
       name: "MySkill",
@@ -124,6 +135,26 @@ describe("validateSkillProperties", () => {
     expect(errors.some((e) => e.includes("exceeds") && e.includes("500"))).toBe(true);
   });
 
+  it("should reject empty compatibility", () => {
+    const properties = {
+      name: "my-skill",
+      description: "A test skill",
+      compatibility: "",
+    };
+    const errors = validateSkillProperties(properties);
+    expect(errors.some((e) => e.includes("non-empty string"))).toBe(true);
+  });
+
+  it("should reject whitespace-only compatibility", () => {
+    const properties = {
+      name: "my-skill",
+      description: "A test skill",
+      compatibility: "   ",
+    };
+    const errors = validateSkillProperties(properties);
+    expect(errors.some((e) => e.includes("non-empty string"))).toBe(true);
+  });
+
   it("should reject non-string compatibility", () => {
     const properties = {
       name: "my-skill",
@@ -132,6 +163,52 @@ describe("validateSkillProperties", () => {
     };
     const errors = validateSkillProperties(properties);
     expect(errors.some((e) => e.includes("must be a string"))).toBe(true);
+  });
+
+  it("should reject non-string license", () => {
+    const properties = {
+      name: "my-skill",
+      description: "A test skill",
+      license: 123 as unknown as string,
+    };
+    const errors = validateSkillProperties(properties);
+    expect(errors.some((e) => e.includes("license") && e.includes("must be a string"))).toBe(true);
+  });
+
+  it("should reject non-string allowedTools", () => {
+    const properties = {
+      name: "my-skill",
+      description: "A test skill",
+      allowedTools: ["Bash(git:*)"] as unknown as string,
+    };
+    const errors = validateSkillProperties(properties);
+    expect(errors.some((e) => e.includes("allowedTools") && e.includes("must be a string"))).toBe(
+      true,
+    );
+  });
+
+  it("should reject non-map metadata", () => {
+    const properties = {
+      name: "my-skill",
+      description: "A test skill",
+      metadata: "author" as unknown as Record<string, string>,
+    };
+    const errors = validateSkillProperties(properties);
+    expect(errors.some((e) => e.includes("metadata") && e.includes("must be a string map"))).toBe(
+      true,
+    );
+  });
+
+  it("should reject non-string metadata values", () => {
+    const properties = {
+      name: "my-skill",
+      description: "A test skill",
+      metadata: { count: 1 } as unknown as Record<string, string>,
+    };
+    const errors = validateSkillProperties(properties);
+    expect(errors.some((e) => e.includes("metadata") && e.includes("must be a string map"))).toBe(
+      true,
+    );
   });
 
   it("should accept all valid fields", () => {
@@ -351,6 +428,99 @@ Body`;
 
     const errors = validateSkillContent(content);
     expect(errors.some((e) => e.includes("Unexpected fields"))).toBe(true);
+  });
+
+  it("should reject empty compatibility field", () => {
+    const content = `---
+name: my-skill
+description: A test skill
+compatibility: ""
+---
+Body`;
+
+    const errors = validateSkillContent(content);
+    expect(errors.some((e) => e.includes("compatibility") && e.includes("non-empty"))).toBe(true);
+  });
+
+  it("should reject non-scalar license field", () => {
+    const content = `---
+name: my-skill
+description: A test skill
+license:
+  - MIT
+---
+Body`;
+
+    const errors = validateSkillContent(content);
+    expect(errors.some((e) => e.includes("license") && e.includes("must be a string"))).toBe(true);
+  });
+
+  it("should reject non-string allowed-tools field", () => {
+    const content = `---
+name: my-skill
+description: A test skill
+allowed-tools:
+  - Bash(git:*)
+---
+Body`;
+
+    const errors = validateSkillContent(content);
+    expect(errors.some((e) => e.includes("allowed-tools") && e.includes("must be a string"))).toBe(
+      true,
+    );
+  });
+
+  it("should reject non-map metadata field", () => {
+    const content = `---
+name: my-skill
+description: A test skill
+metadata: nope
+---
+Body`;
+
+    const errors = validateSkillContent(content);
+    expect(errors.some((e) => e.includes("metadata") && e.includes("YAML mapping"))).toBe(true);
+  });
+
+  it("should reject nested metadata values", () => {
+    const content = `---
+name: my-skill
+description: A test skill
+metadata:
+  nested:
+    value: nope
+---
+Body`;
+
+    const errors = validateSkillContent(content);
+    expect(errors.some((e) => e.includes("metadata") && e.includes("scalar values"))).toBe(true);
+  });
+
+  it("should reject complex metadata keys as invalid YAML", () => {
+    const content = `---
+name: my-skill
+description: A test skill
+metadata:
+  ? [one, two]
+  : value
+---
+Body`;
+
+    const errors = validateSkillContent(content);
+    expect(errors.some((e) => e.includes("Invalid YAML"))).toBe(true);
+  });
+
+  it("should reject non-string metadata keys", () => {
+    const content = `---
+name: my-skill
+description: A test skill
+metadata:
+  1: value
+---
+Body`;
+
+    const errors = validateSkillContent(content);
+    expect(errors.some((e) => e.includes("metadata") && e.includes("string keys"))).toBe(true);
   });
 
   it("should handle unexpected error types gracefully", () => {

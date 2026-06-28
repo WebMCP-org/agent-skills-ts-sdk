@@ -11,13 +11,24 @@ const READ_TOOL_PARAM_RESOURCE_DESCRIPTION =
 const SCHEMA_TYPE_OBJECT = "object";
 const SCHEMA_TYPE_STRING = "string";
 const REQUIRED_READ_TOOL_FIELDS = [READ_TOOL_PARAM_NAME];
+const READ_TOOL_ALLOWED_FIELDS = new Set([READ_TOOL_PARAM_NAME, READ_TOOL_PARAM_RESOURCE]);
+const ERROR_CODE_INVALID_ARGUMENT = "INVALID_ARGUMENT";
 const ERROR_CODE_SKILL_NOT_FOUND = "SKILL_NOT_FOUND";
 const ERROR_CODE_RESOURCE_NOT_FOUND = "RESOURCE_NOT_FOUND";
+
+const isSkillReadArgumentObject = (
+  value: unknown,
+): value is { name: ResolvedSkill["name"]; resource?: unknown } => {
+  return (
+    typeof value === "object" && value !== null && "name" in value && typeof value.name === "string"
+  );
+};
 
 /**
  * Stable error codes for progressive disclosure read failures.
  */
 export type SkillReadErrorCode =
+  | typeof ERROR_CODE_INVALID_ARGUMENT
   | typeof ERROR_CODE_SKILL_NOT_FOUND
   | typeof ERROR_CODE_RESOURCE_NOT_FOUND;
 
@@ -85,16 +96,43 @@ export interface ReadToolSchema {
  * - `name` + `resource`: returns resource content (tier 3)
  *
  * @param skills - Fully resolved in-memory skills.
- * @param args - Read request arguments.
+ * @param args - Read request arguments from a tool call or trusted caller.
  * @returns Structured success or failure payload.
  */
 export function handleSkillRead(
   skills: ReadonlyArray<ResolvedSkill>,
   args: SkillReadArgs,
 ): SkillReadResult | SkillReadError {
+  const rawArgs: unknown = args;
+  if (!isSkillReadArgumentObject(rawArgs)) {
+    return {
+      ok: false,
+      code: ERROR_CODE_INVALID_ARGUMENT,
+      error: 'Field "name" must be a string.',
+    };
+  }
+
+  const extraFields = Object.keys(rawArgs).filter((field) => !READ_TOOL_ALLOWED_FIELDS.has(field));
+  if (extraFields.length > 0) {
+    return {
+      ok: false,
+      code: ERROR_CODE_INVALID_ARGUMENT,
+      error: `Unexpected fields in read arguments: ${extraFields.sort().join(", ")}.`,
+    };
+  }
+
+  const resourceName = "resource" in rawArgs ? rawArgs.resource : undefined;
+  if (resourceName !== undefined && typeof resourceName !== "string") {
+    return {
+      ok: false,
+      code: ERROR_CODE_INVALID_ARGUMENT,
+      error: 'Field "resource" must be a string when provided.',
+    };
+  }
+
   let skill: ResolvedSkill | undefined;
   for (const candidate of skills) {
-    if (candidate.name === args.name) {
+    if (candidate.name === rawArgs.name) {
       skill = candidate;
       break;
     }
@@ -103,11 +141,11 @@ export function handleSkillRead(
     return {
       ok: false,
       code: ERROR_CODE_SKILL_NOT_FOUND,
-      error: `Skill "${args.name}" not found.`,
+      error: `Skill "${rawArgs.name}" not found.`,
     };
   }
 
-  if (!args.resource) {
+  if (resourceName === undefined) {
     return {
       ok: true,
       content: skill.body,
@@ -116,7 +154,7 @@ export function handleSkillRead(
 
   let resource: SkillResource | undefined;
   for (const candidate of skill.resources) {
-    if (candidate.name === args.resource) {
+    if (candidate.name === resourceName) {
       resource = candidate;
       break;
     }
@@ -125,7 +163,7 @@ export function handleSkillRead(
     return {
       ok: false,
       code: ERROR_CODE_RESOURCE_NOT_FOUND,
-      error: `Resource "${args.resource}" not found in skill "${args.name}".`,
+      error: `Resource "${resourceName}" not found in skill "${rawArgs.name}".`,
     };
   }
 
