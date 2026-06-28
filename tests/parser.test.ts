@@ -240,26 +240,26 @@ Body`;
     expect(metadata.description).toBe("A test skill");
   });
 
-  it("should reject non-string name", () => {
+  it("should parse scalar source token name", () => {
     const content = `---
 name: 123
 description: A test skill
 ---
 Body`;
 
-    expect(() => parseFrontmatter(content)).toThrow(ValidationError);
-    expect(() => parseFrontmatter(content)).toThrow("non-empty string");
+    const { metadata } = parseFrontmatter(content);
+    expect(metadata.name).toBe("123");
   });
 
-  it("should reject non-string description", () => {
+  it("should parse scalar source token description", () => {
     const content = `---
 name: my-skill
 description: 123
 ---
 Body`;
 
-    expect(() => parseFrontmatter(content)).toThrow(ValidationError);
-    expect(() => parseFrontmatter(content)).toThrow("non-empty string");
+    const { metadata } = parseFrontmatter(content);
+    expect(metadata.description).toBe("123");
   });
 
   it("should parse license field", () => {
@@ -272,6 +272,19 @@ Body`;
 
     const { metadata } = parseFrontmatter(content);
     expect(metadata.license).toBe("MIT");
+  });
+
+  it("should reject non-scalar license field", () => {
+    const content = `---
+name: my-skill
+description: A test skill
+license:
+  - MIT
+---
+Body`;
+
+    expect(() => parseFrontmatter(content)).toThrow(ValidationError);
+    expect(() => parseFrontmatter(content)).toThrow("Field 'license' must be a string");
   });
 
   it("should parse compatibility field", () => {
@@ -303,19 +316,45 @@ Body`;
     });
   });
 
-  it("should handle metadata without proper formatting (fallback)", () => {
-    const content = `---
+  it("should reject YAML features not accepted by skills-ref", () => {
+    const flowStyleContent = `---
 name: my-skill
 description: A test skill
 metadata: {version: "1.0"}
 ---
 Body`;
+    const anchoredContent = `---
+name: &skill my-skill
+description: *skill
+---
+Body`;
+    const taggedContent = `---
+name: my-skill
+description: !!str A test skill
+---
+Body`;
 
-    const { metadata } = parseFrontmatter(content);
-    expect(metadata.metadata).toBeDefined();
+    expect(() => parseFrontmatter(flowStyleContent)).toThrow(ParseError);
+    expect(() => parseFrontmatter(flowStyleContent)).toThrow("Invalid YAML");
+    expect(() => parseFrontmatter(anchoredContent)).toThrow(ParseError);
+    expect(() => parseFrontmatter(anchoredContent)).toThrow("Invalid YAML");
+    expect(() => parseFrontmatter(taggedContent)).toThrow(ParseError);
+    expect(() => parseFrontmatter(taggedContent)).toThrow("Invalid YAML");
   });
 
-  it("should coerce boolean metadata values to strings", () => {
+  it("should reject non-map metadata field", () => {
+    const content = `---
+name: my-skill
+description: A test skill
+metadata: nope
+---
+Body`;
+
+    expect(() => parseFrontmatter(content)).toThrow(ValidationError);
+    expect(() => parseFrontmatter(content)).toThrow("Field 'metadata' must be a YAML mapping");
+  });
+
+  it("should preserve boolean metadata source tokens as strings", () => {
     const content = `---
 name: my-skill
 description: A test skill
@@ -326,11 +365,11 @@ metadata:
 Body`;
 
     const { metadata } = parseFrontmatter(content);
-    expect(metadata.metadata?.enabled).toBe("True");
-    expect(metadata.metadata?.disabled).toBe("False");
+    expect(metadata.metadata?.enabled).toBe("true");
+    expect(metadata.metadata?.disabled).toBe("false");
   });
 
-  it("should coerce null metadata values to 'None'", () => {
+  it("should preserve null metadata source tokens as strings", () => {
     const content = `---
 name: my-skill
 description: A test skill
@@ -340,10 +379,10 @@ metadata:
 Body`;
 
     const { metadata } = parseFrontmatter(content);
-    expect(metadata.metadata?.empty).toBe("None");
+    expect(metadata.metadata?.empty).toBe("null");
   });
 
-  it("should handle nested metadata values (non-scalar)", () => {
+  it("should reject nested metadata values", () => {
     const content = `---
 name: my-skill
 description: A test skill
@@ -354,11 +393,11 @@ metadata:
 ---
 Body`;
 
-    const { metadata } = parseFrontmatter(content);
-    expect(metadata.metadata?.nested).toBeDefined();
+    expect(() => parseFrontmatter(content)).toThrow(ValidationError);
+    expect(() => parseFrontmatter(content)).toThrow("Field 'metadata' must contain scalar values");
   });
 
-  it("should handle metadata with null value node", () => {
+  it("should preserve empty metadata value nodes as empty strings", () => {
     const content = `---
 name: my-skill
 description: A test skill
@@ -368,8 +407,7 @@ metadata:
 Body`;
 
     const { metadata } = parseFrontmatter(content);
-    // Null YAML value should produce empty string
-    expect(metadata.metadata).toBeDefined();
+    expect(metadata.metadata?.key).toBe("");
   });
 
   it("should handle empty body", () => {
@@ -585,6 +623,46 @@ describe("extractResourceLinks", () => {
     ]);
   });
 
+  it("should extract lib resource links used by real-world skills", () => {
+    const body = `The metric registry is [lib/queries.mjs](lib/queries.mjs).
+Run lib/verify-claim.mjs before reporting.`;
+
+    expect(extractResourceLinks(body)).toEqual([
+      { name: "lib/queries.mjs", path: "lib/queries.mjs" },
+      { name: "lib/verify-claim.mjs", path: "lib/verify-claim.mjs" },
+    ]);
+  });
+
+  it("should extract observed skill-local resource directories", () => {
+    const body = `Read [best practices](./reference/mcp_best_practices.md).
+Then inspect templates/viewer.html, shared/models.md, curl/managed-agents.md,
+examples/general-comms.md, rules/state-context-interface.md, agents/grader.md,
+and eval-viewer/generate_review.py.`;
+
+    expect(extractResourceLinks(body)).toEqual([
+      { name: "best practices", path: "reference/mcp_best_practices.md" },
+      { name: "templates/viewer.html", path: "templates/viewer.html" },
+      { name: "shared/models.md", path: "shared/models.md" },
+      { name: "curl/managed-agents.md", path: "curl/managed-agents.md" },
+      { name: "examples/general-comms.md", path: "examples/general-comms.md" },
+      { name: "rules/state-context-interface.md", path: "rules/state-context-interface.md" },
+      { name: "agents/grader.md", path: "agents/grader.md" },
+      { name: "eval-viewer/generate_review.py", path: "eval-viewer/generate_review.py" },
+    ]);
+  });
+
+  it("should extract root-level markdown-linked resource files", () => {
+    const body = `| Task | Guide |
+| --- | --- |
+| Edit from template | Read [editing.md](editing.md) |
+| Create from scratch | Read [pptxgenjs.md](pptxgenjs.md) |`;
+
+    expect(extractResourceLinks(body)).toEqual([
+      { name: "editing.md", path: "editing.md" },
+      { name: "pptxgenjs.md", path: "pptxgenjs.md" },
+    ]);
+  });
+
   it("should normalize leading ./ from valid resource links", () => {
     const body = `Resources:
 - [build-pizza](./references/build-pizza)
@@ -618,6 +696,19 @@ describe("extractResourceLinks", () => {
     expect(extractResourceLinks(body)).toEqual([{ name: "ok", path: "references/pizza-guide" }]);
   });
 
+  it("should ignore directory-only and empty-segment resource paths", () => {
+    const body = `Resources:
+- [refs](references/)
+- [script](scripts/)
+- [asset](assets/)
+- [plain](references)
+- [double](references//guide.md)
+- references//bare.md
+- [ok](references/guide.md)`;
+
+    expect(extractResourceLinks(body)).toEqual([{ name: "ok", path: "references/guide.md" }]);
+  });
+
   it("should de-duplicate by name and path pair", () => {
     const body = `Resources:
 - [build-pizza](references/build-pizza)
@@ -637,6 +728,56 @@ describe("extractResourceLinks", () => {
 
     expect(extractResourceLinks(body)).toEqual([
       { name: "build-pizza", path: "references/build-pizza" },
+    ]);
+  });
+
+  it("should extract bare resource paths", () => {
+    const body = `Run scripts/extract.py.
+Read references/REFERENCE.md, then use ./assets/template.json`;
+
+    expect(extractResourceLinks(body)).toEqual([
+      { name: "scripts/extract.py", path: "scripts/extract.py" },
+      { name: "references/REFERENCE.md", path: "references/REFERENCE.md" },
+      { name: "assets/template.json", path: "assets/template.json" },
+    ]);
+  });
+
+  it("should extract bare resource paths from inline code spans", () => {
+    const body = "Run `scripts/extract.py`, then inspect `references/REFERENCE.md`.";
+
+    expect(extractResourceLinks(body)).toEqual([
+      { name: "scripts/extract.py", path: "scripts/extract.py" },
+      { name: "references/REFERENCE.md", path: "references/REFERENCE.md" },
+    ]);
+  });
+
+  it("should strip emphatic punctuation from bare resource paths", () => {
+    const body = "Run scripts/extract.py!";
+
+    expect(extractResourceLinks(body)).toEqual([
+      { name: "scripts/extract.py", path: "scripts/extract.py" },
+    ]);
+  });
+
+  it("should strip markdown emphasis markers from bare resource paths", () => {
+    const body = "**templates/generator_template.js** is the p5.js reference.";
+
+    expect(extractResourceLinks(body)).toEqual([
+      { name: "templates/generator_template.js", path: "templates/generator_template.js" },
+    ]);
+  });
+
+  it("should not extract bare resource paths from inside longer tokens", () => {
+    const body = "Ignore prescripts/extract.py and prefix-references/REFERENCE.md.";
+
+    expect(extractResourceLinks(body)).toEqual([]);
+  });
+
+  it("should not duplicate bare paths already represented by markdown links", () => {
+    const body = `Read [guide](references/REFERENCE.md), then open references/REFERENCE.md.`;
+
+    expect(extractResourceLinks(body)).toEqual([
+      { name: "guide", path: "references/REFERENCE.md" },
     ]);
   });
 

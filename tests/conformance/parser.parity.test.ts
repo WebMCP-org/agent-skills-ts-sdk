@@ -1,5 +1,7 @@
+/// <reference types="node" />
+
 /**
- * Parser conformance tests — parity with skills-ref (commit fbb6c82)
+ * Parser conformance tests — parity with the pinned skills-ref lock.
  *
  * Tests parseFrontmatter, parseSkillContent, findSkillMdFile, extractBody
  * against fixture files to pin expected behavior.
@@ -49,6 +51,23 @@ describe("Parser conformance", () => {
         count: "42",
         pi: "3.14",
       });
+    });
+
+    it("preserves source scalar metadata strings (valid-metadata-source-scalars.md)", () => {
+      const { metadata } = parseFrontmatter(fixture("valid-metadata-source-scalars.md"));
+      expect(metadata.metadata).toEqual({
+        enabled: "true",
+        disabled: "false",
+        nullish: "null",
+        empty: "",
+      });
+    });
+
+    it("preserves source scalar optional fields (valid-optional-source-scalars.md)", () => {
+      const { metadata } = parseFrontmatter(fixture("valid-optional-source-scalars.md"));
+      expect(metadata.license).toBe("123");
+      expect(metadata.compatibility).toBe("1.0");
+      expect(metadata["allowed-tools"]).toBe("true");
     });
 
     it("parses valid-i18n-chinese.md (CJK name)", () => {
@@ -130,6 +149,13 @@ describe("Parser conformance", () => {
         author: "Test Author",
         version: "2.0",
       });
+    });
+
+    it("maps source scalar optional fields", () => {
+      const { properties } = parseSkillContent(fixture("valid-optional-source-scalars.md"));
+      expect(properties.license).toBe("123");
+      expect(properties.compatibility).toBe("1.0");
+      expect(properties.allowedTools).toBe("true");
     });
   });
 

@@ -1,5 +1,7 @@
+/// <reference types="node" />
+
 /**
- * Validator conformance tests — parity with skills-ref (commit fbb6c82)
+ * Validator conformance tests — parity with the pinned skills-ref lock.
  *
  * Tests validateSkillProperties, validateSkillContent, validateSkillEntries
  * against fixture files to pin expected behavior.
@@ -29,6 +31,14 @@ describe("Validator conformance", () => {
 
     it("valid-metadata-coercion.md", () => {
       expect(validateSkillContent(fixture("valid-metadata-coercion.md"))).toEqual([]);
+    });
+
+    it("valid-metadata-source-scalars.md", () => {
+      expect(validateSkillContent(fixture("valid-metadata-source-scalars.md"))).toEqual([]);
+    });
+
+    it("valid-optional-source-scalars.md", () => {
+      expect(validateSkillContent(fixture("valid-optional-source-scalars.md"))).toEqual([]);
     });
 
     it("valid-i18n-chinese.md", () => {

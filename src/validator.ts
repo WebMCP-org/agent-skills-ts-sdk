@@ -66,6 +66,10 @@ export const MAX_COMPATIBILITY_LENGTH = 500;
 export const ALLOWED_FIELDS = new Set<string>(SKILL_FRONTMATTER_KEYS);
 const SKILL_NAME_CHARACTER_PATTERN = /^[\p{L}\p{N}-]+$/u;
 
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+};
+
 /**
  * Renders a deterministic list of frontmatter fields for error messages.
  *
@@ -177,7 +181,7 @@ function validateDescription(description: SkillProperties["description"]): strin
  * Validate compatibility format.
  *
  * Spec: https://agentskills.io/specification
- * - Max 500 characters
+ * - 1-500 characters when present
  * - Optional field
  */
 function validateCompatibility(compatibility: string): string[] {
@@ -185,6 +189,11 @@ function validateCompatibility(compatibility: string): string[] {
 
   if (typeof compatibility !== "string") {
     errors.push("Field 'compatibility' must be a string");
+    return errors;
+  }
+
+  if (!compatibility.trim()) {
+    errors.push("Field 'compatibility' must be a non-empty string");
     return errors;
   }
 
@@ -255,7 +264,29 @@ export function validateSkillProperties(
     errors.push(...validateCompatibility(properties.compatibility));
   }
 
-  if (options.expectedName && typeof properties.name === "string" && properties.name.trim()) {
+  if (properties.license !== undefined && typeof properties.license !== "string") {
+    errors.push("Field 'license' must be a string");
+  }
+
+  if (properties.allowedTools !== undefined && typeof properties.allowedTools !== "string") {
+    errors.push("Field 'allowedTools' must be a string");
+  }
+
+  if (properties.metadata !== undefined) {
+    if (!isRecord(properties.metadata)) {
+      errors.push("Field 'metadata' must be a string map");
+    } else if (!Object.values(properties.metadata).every((value) => typeof value === "string")) {
+      errors.push("Field 'metadata' must be a string map");
+    }
+  }
+
+  if (options.expectedName !== undefined && typeof options.expectedName !== "string") {
+    errors.push("Field 'expectedName' must be a string");
+  } else if (
+    options.expectedName &&
+    typeof properties.name === "string" &&
+    properties.name.trim()
+  ) {
     const expectedName = normalizeNFKC(options.expectedName);
     const normalizedName = normalizeSkillName(properties.name);
 

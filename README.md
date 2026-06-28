@@ -147,7 +147,7 @@ if (!result.ok) {
 
 ### Validation
 
-- `validateSkillProperties` enforces the name/description/compatibility rules and optionally checks an expected name.
+- `validateSkillProperties` enforces field types, name/description/compatibility rules, and optionally checks an expected name.
 - `validateSkillContent` validates a single SKILL.md string, including unknown frontmatter fields.
 - `validateSkillEntries` mirrors `skills-ref validate` for in-memory file lists while letting the host surface path and directory state.
 
@@ -191,8 +191,8 @@ are surfaced through `validateSkillEntries` so hosts can supply their own storag
 ### Optional Fields
 
 - `license`
-- `compatibility` (max 500 chars)
-- `metadata` (key-value pairs)
+- `compatibility` (1-500 chars when present)
+- `metadata` (string key-value pairs)
 - `allowed-tools` (experimental)
 
 ### Validation Rules
@@ -209,13 +209,13 @@ This package follows Test-Driven Development with comprehensive test coverage:
 
 ```bash
 # Run tests
-pnpm test
+vp test
 
-# Run tests in watch mode
-pnpm test:watch
+# Run formatting, linting, and type checks
+vp check
 
 # Generate coverage report
-pnpm test:coverage
+vp run test:coverage
 ```
 
 **Coverage goals:**

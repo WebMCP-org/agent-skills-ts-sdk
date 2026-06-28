@@ -59,6 +59,12 @@ describe("validateSkillPatch", () => {
       expect(result.errors?.[0].code).toBe("PATCH_INVALID_VERSION");
     });
 
+    it("rejects missing version → PATCH_INVALID_VERSION", () => {
+      const result = validateSkillPatch({ operations: [] });
+      expect(result.ok).toBe(false);
+      expect(result.errors?.[0].code).toBe("PATCH_INVALID_VERSION");
+    });
+
     it("rejects missing operations → PATCH_MISSING_OPERATIONS", () => {
       const result = validateSkillPatch({ version: 1 });
       expect(result.ok).toBe(false);
@@ -291,6 +297,26 @@ describe("applySkillPatch", () => {
     expect(result.errors?.[0].code).toBe("SKILL_INVALID");
   });
 
+  it("returns validation errors when patching in invalid optional frontmatter", () => {
+    const patch = {
+      version: 1,
+      operations: [
+        {
+          type: "insert",
+          anchor: "description: Sample description\n",
+          text: "metadata:\n  nested:\n    value: nope\n",
+        },
+      ],
+    };
+
+    const result = applySkillPatch(baseSkill, patch);
+    expect(result.ok).toBe(false);
+    expect(result.errors?.[0]).toMatchObject({
+      code: "SKILL_INVALID",
+      message: "Field 'metadata' must contain scalar values",
+    });
+  });
+
   it("supports replacing empty content with a new skill", () => {
     const patch = {
       version: 1,
@@ -443,6 +469,23 @@ describe("applySkillPatch", () => {
       });
       expect(result.ok).toBe(true);
       expect(result.content).toBe("baz\nbar\nbaz");
+    });
+
+    it("rejects invalid global expectedMatches", () => {
+      const patch = {
+        version: 1,
+        operations: [{ type: "replace", before: "foo", after: "bar" }],
+      };
+      const result = applySkillPatch("foo", patch, {
+        validate: false,
+        expectedMatches: 0,
+      });
+
+      expect(result.ok).toBe(false);
+      expect(result.errors?.[0]).toMatchObject({
+        code: "OPERATION_INVALID_EXPECTED_MATCHES",
+        field: "expectedMatches",
+      });
     });
 
     it("operation-level expectedMatches overrides global", () => {
@@ -644,6 +687,16 @@ describe("createSkillPatch", () => {
     const patch = createSkillPatch(base, updated, { contextLines: 0 });
 
     expect(patch.operations.length).toBe(2);
+    const result = applySkillPatch(base, patch, { validate: false });
+    expect(result.ok).toBe(true);
+    expect(result.content).toBe(updated);
+  });
+
+  it("falls back to an applicable patch for contextLines: 0 ambiguous generated context", () => {
+    const base = "a\na\na\na";
+    const updated = "a\nb\na\na\na";
+    const patch = createSkillPatch(base, updated, { contextLines: 0 });
+
     const result = applySkillPatch(base, patch, { validate: false });
     expect(result.ok).toBe(true);
     expect(result.content).toBe(updated);

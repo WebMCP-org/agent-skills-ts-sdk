@@ -59,6 +59,8 @@
     "test": "vp test",
     "test:run": "vp test run",
     "check": "vp check",
+    "reference:check": "node scripts/check-reference-drift.mjs --refresh",
+    "reference:update": "node scripts/check-reference-drift.mjs --refresh --update",
     "typecheck": "tsc --noEmit",
     "test:coverage": "vp test run --coverage",
     "fallow:audit": "fallow audit --base origin/main --ci --fail-on-issues",

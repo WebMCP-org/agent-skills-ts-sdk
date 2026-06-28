@@ -78,9 +78,11 @@ Accepts the same optional `ParseFrontmatterOptions` as `parseFrontmatter`.
 
 ### extractResourceLinks(body)
 
-Extracts markdown links representing tier-3 resources.
+Extracts tier-3 resource references from Markdown links and bare relative paths.
 
-- Includes only links under `scripts/*`, `references/*`, `assets/*`.
+- Includes paths under observed skill-local resource directories such as
+  `scripts/*`, `references/*`, `assets/*`, `lib/*`, `rules/*`, or `templates/*`.
+- Includes root-level files when referenced as Markdown links.
 - Ignores URLs, anchors, and traversal-style paths.
 - Accepts and normalizes leading `./`.
 - Returns deduplicated `{ name, path }` pairs.
@@ -107,8 +109,9 @@ This is the filesystem-free analog of `skills_ref.read_properties`.
 
 ### validateSkillProperties(properties, options)
 
-Validates name, description, and compatibility fields. Provide `expectedName`
-to enforce a name match against a host-provided value (e.g., directory slug).
+Validates name, description, compatibility, and optional frontmatter field
+types. Provide `expectedName` to enforce a name match against a host-provided
+value (e.g., directory slug).
 
 ### validateSkillContent(content)
 
@@ -152,7 +155,9 @@ Pure in-memory 2-level read handler:
 
 - no `resource`: returns skill body (tier 2)
 - with `resource`: returns resource content (tier 3)
+- validates tool-call argument shape at runtime
 - returns structured errors with machine-readable `code`
+  (`INVALID_ARGUMENT`, `SKILL_NOT_FOUND`, `RESOURCE_NOT_FOUND`)
 
 ### toReadToolSchema(skills, options?)
 
@@ -191,7 +196,8 @@ Applies patch operations sequentially and returns a structured result:
   or the resulting content violates the Agent Skills spec.
 
 By default, the resulting `SKILL.md` is validated with `validateSkillContent`
-and can optionally enforce an `expectedName`.
+and can optionally enforce an `expectedName`. `options.expectedMatches` must be
+a positive integer when provided.
 
 ## Utilities
 

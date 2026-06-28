@@ -33,12 +33,12 @@ Markdown content here...
 
 ### Optional Fields
 
-| Field           | Type   | Constraints                                                                              |
-| --------------- | ------ | ---------------------------------------------------------------------------------------- |
-| `license`       | string | License name or reference to bundled license file.                                       |
-| `compatibility` | string | Max 500 characters. Environment requirements (product, system packages, network access). |
-| `metadata`      | object | Arbitrary key-value string mapping for additional properties.                            |
-| `allowed-tools` | string | Space-delimited list of pre-approved tools (Experimental).                               |
+| Field           | Type   | Constraints                                                                                          |
+| --------------- | ------ | ---------------------------------------------------------------------------------------------------- |
+| `license`       | string | License name or reference to bundled license file.                                                   |
+| `compatibility` | string | 1-500 characters when provided. Environment requirements (product, system packages, network access). |
+| `metadata`      | object | Arbitrary string key-value mapping for additional properties.                                        |
+| `allowed-tools` | string | Space-delimited list of pre-approved tools (Experimental).                                           |
 
 ## Validation Rules
 
@@ -94,7 +94,7 @@ description: Helps with PDFs. # Too vague
 
 ### Compatibility Field
 
-**Max Length**: 500 characters
+**Length**: 1-500 characters when provided
 **Optional**
 
 ```yaml
@@ -129,7 +129,7 @@ Skills use a three-tier loading strategy:
 
 1. **Metadata** (~50-100 tokens): `name` and `description` fields loaded at startup
 2. **Instructions** (~500-5000 tokens): Full `SKILL.md` body loaded when activated
-3. **Resources** (as needed): Files in `scripts/`, `references/`, `assets/` loaded on demand
+3. **Resources** (as needed): Files in `scripts/`, `references/`, `assets/`, or other skill-local directories loaded on demand
 
 ## Directory Structure
 
@@ -155,6 +155,7 @@ skill-name/
 5. Required fields must be non-empty strings
 6. Names and descriptions are trimmed
 7. Metadata values are converted to strings
+8. Optional fields must match their specified types
 
 ## Body Content
 

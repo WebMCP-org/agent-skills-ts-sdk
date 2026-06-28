@@ -92,6 +92,22 @@ describe("skillPropertiesToDict", () => {
     expect(dict).not.toHaveProperty("license");
   });
 
+  it("should exclude null optional fields", () => {
+    const props: SkillProperties = {
+      name: "test-skill",
+      description: "A test skill",
+      license: null as unknown as string,
+      compatibility: null as unknown as string,
+      allowedTools: null as unknown as string,
+      metadata: null as unknown as Record<string, string>,
+    };
+    const dict = skillPropertiesToDict(props);
+    expect(dict).toEqual({
+      name: "test-skill",
+      description: "A test skill",
+    });
+  });
+
   it("should include compatibility when present", () => {
     const props: SkillProperties = {
       name: "test-skill",

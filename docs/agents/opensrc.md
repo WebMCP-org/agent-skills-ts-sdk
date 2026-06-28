@@ -27,6 +27,10 @@ Python example/reference package lives inside that repo at `skills-ref/`; access
 it through `opensrc path`, not a direct clone or `git+https://...#subdirectory`
 checkout.
 
+Use `vp run reference:check` to verify the pinned AgentSkills reference lock.
+When upstream changes, run `vp run reference:update`, inspect the diff, then
+align conformance tests or update `tests/conformance/allowlist.json`.
+
 ```bash
 PY_REF="$(vp exec opensrc path github:agentskills/agentskills)/skills-ref"
 rg "parse" "$PY_REF/src/skills_ref"

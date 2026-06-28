@@ -402,7 +402,7 @@ export function validateSkillPatch(patch: unknown): SkillPatchValidationResult {
 
   const errors: SkillPatchIssue[] = [];
 
-  if ("version" in patch && patch.version !== 1) {
+  if (patch.version !== 1) {
     errors.push(
       createIssue({
         code: "PATCH_INVALID_VERSION",
@@ -804,6 +804,83 @@ const collectSkillValidationIssues = (
   );
 };
 
+const collectOptionalPatchValidationIssues = (
+  content: SkillContent,
+  validateOption: SkillPatchApplyOptions["validate"],
+): SkillPatchIssue[] => {
+  if (!validateOption) {
+    return [];
+  }
+
+  const expectedName = typeof validateOption === "object" ? validateOption.expectedName : undefined;
+  return collectSkillValidationIssues(content, expectedName);
+};
+
+const validateGlobalExpectedMatches = (
+  expectedMatches: SkillPatchApplyOptions["expectedMatches"],
+): SkillPatchApplyResult | null => {
+  if (expectedMatches === undefined || isPositiveInteger(expectedMatches)) {
+    return null;
+  }
+
+  return {
+    ok: false,
+    errors: [
+      createIssue({
+        code: "OPERATION_INVALID_EXPECTED_MATCHES",
+        message: "Global expectedMatches must be a positive integer.",
+        field: "expectedMatches",
+      }),
+    ],
+    appliedOperations: 0,
+  };
+};
+
+const applyNormalizedOperation = (
+  content: SkillContent,
+  operation: SkillPatchOperation,
+  operationIndex: number,
+  fallbackExpectedMatches: SkillPatchApplyOptions["expectedMatches"],
+): { content: SkillContent; matchCount: number } | SkillPatchIssue => {
+  const expectedProvided =
+    operation.expectedMatches !== undefined || fallbackExpectedMatches !== undefined;
+  const expectedMatches = normalizeExpectedMatches(
+    operation.expectedMatches,
+    fallbackExpectedMatches,
+  );
+
+  if (operation.type === "replace") {
+    return applyReplace(
+      content,
+      operation.before,
+      operation.after,
+      operationIndex,
+      expectedMatches,
+      expectedProvided,
+    );
+  }
+
+  if (operation.type === "delete") {
+    return applyDelete(
+      content,
+      operation.before,
+      operationIndex,
+      expectedMatches,
+      expectedProvided,
+    );
+  }
+
+  return applyInsert(
+    content,
+    operation.anchor,
+    operation.text,
+    operation.position ?? "after",
+    operationIndex,
+    expectedMatches,
+    expectedProvided,
+  );
+};
+
 /**
  * Applies a patch to SKILL.md content with optional post-validation.
  *
@@ -825,6 +902,11 @@ export function applySkillPatch(
   patch: unknown,
   options: SkillPatchApplyOptions = {},
 ): SkillPatchApplyResult {
+  const expectedMatchesError = validateGlobalExpectedMatches(options.expectedMatches);
+  if (expectedMatchesError) {
+    return expectedMatchesError;
+  }
+
   const validation = validateSkillPatch(patch);
   if (!validation.ok) {
     return { ok: false, errors: toValidationErrors(validation) };
@@ -844,14 +926,9 @@ export function applySkillPatch(
 
   const operations = validation.patch.operations;
   if (operations.length === 0) {
-    const validateOption = options.validate ?? true;
-    if (validateOption) {
-      const expectedName =
-        typeof validateOption === "object" ? validateOption.expectedName : undefined;
-      const issues = collectSkillValidationIssues(content, expectedName);
-      if (issues.length > 0) {
-        return { ok: false, errors: issues, appliedOperations: 0 };
-      }
+    const issues = collectOptionalPatchValidationIssues(content, options.validate ?? true);
+    if (issues.length > 0) {
+      return { ok: false, errors: issues, appliedOperations: 0 };
     }
     return { ok: true, content, appliedOperations: 0 };
   }
@@ -860,56 +937,7 @@ export function applySkillPatch(
   let appliedOperations = 0;
 
   for (const [index, operation] of operations.entries()) {
-    const expectedProvided =
-      operation.expectedMatches !== undefined || options.expectedMatches !== undefined;
-    const expectedMatches = normalizeExpectedMatches(
-      operation.expectedMatches,
-      options.expectedMatches,
-    );
-
-    if (operation.type === "replace") {
-      const result = applyReplace(
-        nextContent,
-        operation.before,
-        operation.after,
-        index,
-        expectedMatches,
-        expectedProvided,
-      );
-      if ("code" in result) {
-        return { ok: false, errors: [result], appliedOperations };
-      }
-      nextContent = result.content;
-      appliedOperations += 1;
-      continue;
-    }
-
-    if (operation.type === "delete") {
-      const result = applyDelete(
-        nextContent,
-        operation.before,
-        index,
-        expectedMatches,
-        expectedProvided,
-      );
-      if ("code" in result) {
-        return { ok: false, errors: [result], appliedOperations };
-      }
-      nextContent = result.content;
-      appliedOperations += 1;
-      continue;
-    }
-
-    const position = operation.position ?? "after";
-    const result = applyInsert(
-      nextContent,
-      operation.anchor,
-      operation.text,
-      position,
-      index,
-      expectedMatches,
-      expectedProvided,
-    );
+    const result = applyNormalizedOperation(nextContent, operation, index, options.expectedMatches);
     if ("code" in result) {
       return { ok: false, errors: [result], appliedOperations };
     }
@@ -917,14 +945,9 @@ export function applySkillPatch(
     appliedOperations += 1;
   }
 
-  const validateOption = options.validate ?? true;
-  if (validateOption) {
-    const expectedName =
-      typeof validateOption === "object" ? validateOption.expectedName : undefined;
-    const issues = collectSkillValidationIssues(nextContent, expectedName);
-    if (issues.length > 0) {
-      return { ok: false, errors: issues, appliedOperations };
-    }
+  const issues = collectOptionalPatchValidationIssues(nextContent, options.validate ?? true);
+  if (issues.length > 0) {
+    return { ok: false, errors: issues, appliedOperations };
   }
 
   return { ok: true, content: nextContent, appliedOperations };
@@ -1067,57 +1090,86 @@ const buildReplaceOperations = (
   diff: SkillDiffSegment[],
   contextLines: number,
 ): SkillPatchReplaceOperation[] => {
-  const operations: SkillPatchReplaceOperation[] = [];
-  let leadingContext: string[] = [];
-  let pending: { before: string[]; after: string[] } | null = null;
+  const state: ReplaceOperationBuildState = {
+    operations: [],
+    leadingContext: [],
+    pending: null,
+  };
 
   for (const segment of diff) {
-    if (segment.type === "equal") {
-      if (pending) {
-        if (segment.lines.length > contextLines) {
-          const trailing = segment.lines.slice(0, contextLines);
-          pending.before.push(...trailing);
-          pending.after.push(...trailing);
-          operations.push({
-            type: "replace",
-            before: pending.before.join("\n"),
-            after: pending.after.join("\n"),
-          });
-          pending = null;
-          leadingContext = contextLines > 0 ? segment.lines.slice(-contextLines) : [];
-        } else {
-          pending.before.push(...segment.lines);
-          pending.after.push(...segment.lines);
-        }
-      } else {
-        leadingContext = contextLines > 0 ? segment.lines.slice(-contextLines) : [];
-      }
+    if (segment.type !== "equal") {
+      appendChangedReplaceSegment(state, segment);
       continue;
     }
 
-    if (!pending) {
-      pending = {
-        before: [...leadingContext],
-        after: [...leadingContext],
-      };
-    }
-
-    if (segment.type === "delete") {
-      pending.before.push(...segment.lines);
-    } else {
-      pending.after.push(...segment.lines);
-    }
+    appendEqualReplaceSegment(state, segment.lines, contextLines);
   }
 
-  if (pending) {
-    operations.push({
-      type: "replace",
-      before: pending.before.join("\n"),
-      after: pending.after.join("\n"),
-    });
+  flushPendingReplaceOperation(state);
+  return state.operations;
+};
+
+type PendingReplaceOperation = { before: string[]; after: string[] };
+
+interface ReplaceOperationBuildState {
+  operations: SkillPatchReplaceOperation[];
+  leadingContext: string[];
+  pending: PendingReplaceOperation | null;
+}
+
+const appendChangedReplaceSegment = (
+  state: ReplaceOperationBuildState,
+  segment: SkillDiffSegment,
+): void => {
+  state.pending ??= { before: [...state.leadingContext], after: [...state.leadingContext] };
+  const lines = segment.type === "delete" ? state.pending.before : state.pending.after;
+  lines.push(...segment.lines);
+};
+
+const appendEqualReplaceSegment = (
+  state: ReplaceOperationBuildState,
+  lines: string[],
+  contextLines: number,
+): void => {
+  if (!state.pending) {
+    state.leadingContext = contextLines > 0 ? lines.slice(-contextLines) : [];
+    return;
   }
 
-  return operations;
+  if (lines.length <= contextLines) {
+    state.pending.before.push(...lines);
+    state.pending.after.push(...lines);
+    return;
+  }
+
+  const trailing = lines.slice(0, contextLines);
+  state.pending.before.push(...trailing);
+  state.pending.after.push(...trailing);
+  flushPendingReplaceOperation(state);
+  state.leadingContext = contextLines > 0 ? lines.slice(-contextLines) : [];
+};
+
+const flushPendingReplaceOperation = (state: ReplaceOperationBuildState): void => {
+  if (!state.pending) {
+    return;
+  }
+  state.operations.push(replaceOperationFromPending(state.pending));
+  state.pending = null;
+};
+
+const replaceOperationFromPending = (
+  pending: PendingReplaceOperation,
+): SkillPatchReplaceOperation => ({
+  type: "replace",
+  before: pending.before.join("\n"),
+  after: pending.after.join("\n"),
+});
+
+const createWholeContentReplacePatch = (base: SkillContent, updated: SkillContent): SkillPatch => {
+  return {
+    version: 1,
+    operations: [{ type: "replace", before: base, after: updated }],
+  };
 };
 
 /**
@@ -1145,9 +1197,13 @@ export function createSkillPatch(
   const contextLines = Math.max(options.contextLines ?? DEFAULT_CONTEXT_LINES, 0);
   const diff = diffSkillContent(base, updated);
   const operations = buildReplaceOperations(diff.segments, contextLines);
-
-  return {
+  const patch: SkillPatch = {
     version: 1,
     operations,
   };
+
+  const roundTrip = applySkillPatch(base, patch, { validate: false });
+  return roundTrip.ok && roundTrip.content === updated
+    ? patch
+    : createWholeContentReplacePatch(base, updated);
 }

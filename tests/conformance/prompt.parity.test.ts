@@ -1,5 +1,7 @@
+/// <reference types="node" />
+
 /**
- * Prompt conformance tests — parity with skills-ref (commit fbb6c82)
+ * Prompt conformance tests — parity with the pinned skills-ref lock.
  *
  * Tests toPrompt XML output format against fixtures.
  */

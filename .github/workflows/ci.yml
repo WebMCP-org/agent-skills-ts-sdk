@@ -6,6 +6,8 @@ on:
   push:
     branches:
       - main
+  schedule:
+    - cron: "17 15 * * 1"
   workflow_dispatch:
 
 permissions: {}
@@ -70,6 +72,11 @@ jobs:
 
       - name: Install dependencies
         run: vp install --frozen-lockfile
+
+      - name: Check AgentSkills reference drift
+        run: vp run reference:check
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Validate package shape
         run: vp run validate:package
