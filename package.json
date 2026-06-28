@@ -1,6 +1,6 @@
 {
   "name": "agent-skills-ts-sdk",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "description": "TypeScript parser, validator, prompt, and patch utilities for the AgentSkills specification",
   "keywords": [
     "agent-skills",

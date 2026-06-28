@@ -40,7 +40,7 @@ const UTF8_BOM = "\uFEFF";
 const INPUT_MODE_STRICT = "strict";
 const INPUT_MODE_EMBEDDED = "embedded";
 const RESOURCE_DEDUPE_SEPARATOR = "\u0000";
-const RESOURCE_PATH_SEGMENTS = new Set([
+const RESOURCE_PATH_SEGMENTS = [
   "scripts",
   "references",
   "assets",
@@ -53,12 +53,11 @@ const RESOURCE_PATH_SEGMENTS = new Set([
   "rules",
   "agents",
   "eval-viewer",
-]);
-const MARKDOWN_RESOURCE_LINK_PATTERN = /\[([^\]\n]+)\]\(([^)\n]+)\)/g;
-const BARE_RESOURCE_PATH_PATTERN =
-  /(?:\.\/)*(?:scripts|references|assets|lib|reference|templates|shared|curl|examples|rules|agents|eval-viewer)\/[^\s`<>"')\]}]+/g;
-const BARE_RESOURCE_TRAILING_PUNCTUATION = /[.,;:!*]+$/;
-const BARE_RESOURCE_PATH_PREFIX_PATTERN = /[\p{L}\p{N}_-]/u;
+] as const;
+const RESOURCE_PATH_SEGMENT_SET = new Set<string>(RESOURCE_PATH_SEGMENTS);
+const RESOURCE_PATH_PREFIXES = RESOURCE_PATH_SEGMENTS.map((segment) => `${segment}/`);
+const BARE_RESOURCE_TRAILING_PUNCTUATION = ".,;:!*";
+const BARE_RESOURCE_PATH_TERMINATORS = new Set(["`", "<", ">", '"', "'", ")", "]", "}"]);
 const ROOT_RESOURCE_FILE_PATTERN = /^[^/.][^/]*\.[^/.]+$/;
 const CHAR_OPEN_PAREN = "(";
 const URL_SCHEME_PATTERN = /^[a-zA-Z][a-zA-Z\d+\-.]*:/;
@@ -122,12 +121,71 @@ const isMetadataMap = <TMetadata extends SkillMetadataMap>(value: unknown): valu
  */
 const stripMarkdownLinkTitle = (rawPath: string): string => {
   const trimmed = rawPath.trim();
-  const spaceIndex = trimmed.search(/\s/);
-  return spaceIndex === -1 ? trimmed : trimmed.slice(0, spaceIndex);
+  for (let index = 0; index < trimmed.length; index += 1) {
+    if (isWhitespace(trimmed[index] ?? "")) {
+      return trimmed.slice(0, index);
+    }
+  }
+  return trimmed;
 };
 
 const stripBareResourceTrailingPunctuation = (rawPath: string): string => {
-  return rawPath.replace(BARE_RESOURCE_TRAILING_PUNCTUATION, "");
+  let end = rawPath.length;
+  while (end > 0 && BARE_RESOURCE_TRAILING_PUNCTUATION.includes(rawPath[end - 1] ?? "")) {
+    end -= 1;
+  }
+  return rawPath.slice(0, end);
+};
+
+const isWhitespace = (char: string): boolean => char !== "" && char.trim() === "";
+
+const isBareResourcePathPrefixChar = (char: string): boolean =>
+  char === "_" ||
+  char === "-" ||
+  (char >= "0" && char <= "9") ||
+  char.toLocaleLowerCase() !== char.toLocaleUpperCase();
+
+const isBareResourcePathTerminator = (char: string): boolean =>
+  char === "" || isWhitespace(char) || BARE_RESOURCE_PATH_TERMINATORS.has(char);
+
+const findMarkdownTokenEnd = (body: SkillBody, start: number, terminator: string): number => {
+  for (let index = start; index < body.length; index += 1) {
+    const char = body[index];
+    if (char === "\n" || char === "\r") {
+      return -1;
+    }
+    if (char === terminator) {
+      return index;
+    }
+  }
+
+  return -1;
+};
+
+const readBareResourcePath = (body: SkillBody, start: number): string | null => {
+  let segmentStart = start;
+  while (body.startsWith("./", segmentStart)) {
+    segmentStart += 2;
+  }
+
+  let matchedPrefix: string | null = null;
+  for (const prefix of RESOURCE_PATH_PREFIXES) {
+    if (body.startsWith(prefix, segmentStart)) {
+      matchedPrefix = prefix;
+      break;
+    }
+  }
+
+  if (!matchedPrefix) {
+    return null;
+  }
+
+  let end = segmentStart + matchedPrefix.length;
+  while (end < body.length && !isBareResourcePathTerminator(body[end] ?? "")) {
+    end += 1;
+  }
+
+  return body.slice(start, end);
 };
 
 const hasBareResourcePathBoundary = (body: SkillBody, start: number): boolean => {
@@ -145,7 +203,7 @@ const hasBareResourcePathBoundary = (body: SkillBody, start: number): boolean =>
     previous !== "/" &&
     previous !== CHAR_OPEN_PAREN &&
     previous !== "\\" &&
-    !BARE_RESOURCE_PATH_PREFIX_PATTERN.test(previous)
+    !isBareResourcePathPrefixChar(previous)
   );
 };
 
@@ -180,7 +238,7 @@ const normalizeResourcePathText = (path: string): string => {
 };
 
 const isAllowedNestedResourcePath = (segments: string[]): boolean => {
-  if (segments.length < 2 || !RESOURCE_PATH_SEGMENTS.has(segments[0] ?? "")) {
+  if (segments.length < 2 || !RESOURCE_PATH_SEGMENT_SET.has(segments[0] ?? "")) {
     return false;
   }
   return segments.every((segment) => segment !== "." && segment !== "..");
@@ -599,17 +657,38 @@ const collectMarkdownResourceLinks = (
 ): Set<string> => {
   const linkedPaths = new Set<string>();
 
-  for (const match of body.matchAll(MARKDOWN_RESOURCE_LINK_PATTERN)) {
-    const rawName = match[1]?.trim() ?? "";
-    const rawPath = match[2] ?? "";
+  for (let index = 0; index < body.length; index += 1) {
+    const nameStart = body.indexOf("[", index);
+    if (nameStart === -1) {
+      break;
+    }
+
+    const nameEnd = findMarkdownTokenEnd(body, nameStart + 1, "]");
+    if (nameEnd === -1 || body[nameEnd + 1] !== "(") {
+      index = nameStart;
+      continue;
+    }
+
+    const pathStart = nameEnd + 2;
+    const pathEnd = findMarkdownTokenEnd(body, pathStart, ")");
+    if (pathEnd === -1) {
+      index = nameEnd;
+      continue;
+    }
+
+    const rawName = body.slice(nameStart + 1, nameEnd).trim();
+    const rawPath = body.slice(pathStart, pathEnd);
     const normalizedPath = normalizeResourcePath(stripMarkdownLinkTitle(rawPath));
     if (!rawName || !normalizedPath) {
+      index = pathEnd;
       continue;
     }
 
     if (appendResourceLink(links, dedupe, rawName, normalizedPath)) {
       linkedPaths.add(normalizedPath);
     }
+
+    index = pathEnd;
   }
 
   return linkedPaths;
@@ -621,18 +700,24 @@ const collectBareResourceLinks = (
   dedupe: Set<string>,
   linkedPaths: Set<string>,
 ): void => {
-  for (const match of body.matchAll(BARE_RESOURCE_PATH_PATTERN)) {
-    const start = match.index ?? -1;
-    const normalizedPath = normalizeResourcePath(stripBareResourceTrailingPunctuation(match[0]));
+  for (let index = 0; index < body.length; index += 1) {
+    const rawPath = readBareResourcePath(body, index);
+    if (!rawPath) {
+      continue;
+    }
+
+    const normalizedPath = normalizeResourcePath(stripBareResourceTrailingPunctuation(rawPath));
     if (
-      !hasBareResourcePathBoundary(body, start) ||
+      !hasBareResourcePathBoundary(body, index) ||
       !normalizedPath ||
       linkedPaths.has(normalizedPath)
     ) {
+      index += rawPath.length - 1;
       continue;
     }
 
     appendResourceLink(links, dedupe, normalizedPath, normalizedPath);
+    index += rawPath.length - 1;
   }
 };
 
