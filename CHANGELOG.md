@@ -1,5 +1,11 @@
 # agent-skills-ts-sdk
 
+## 2.4.0
+
+### Minor Changes
+
+- 4ff02bf: Add skill source and registry helpers for building model-facing prompts and read tools from in-memory skill entries or host-provided sources.
+
 ## 2.3.3
 
 ### Patch Changes
