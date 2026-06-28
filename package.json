@@ -80,7 +80,7 @@
   "devDependencies": {
     "@changesets/cli": "2.29.8",
     "@types/node": "^22.17.2",
-    "@vitest/coverage-v8": "^4.1.0",
+    "@vitest/coverage-v8": "4.1.8",
     "fallow": "2.70.0",
     "opensrc": "^0.7.2",
     "publint": "0.3.20",
