@@ -1,16 +1,16 @@
-* @alexmnahas
+* @MiguelsPizza @omarkawach
 
-.github/** @alexmnahas
-.changeset/** @alexmnahas
-CODE_OF_CONDUCT.md @alexmnahas
-CONTRIBUTING.md @alexmnahas
-PRIVACY.md @alexmnahas
-SECURITY.md @alexmnahas
-SUPPORT.md @alexmnahas
-docs/open-source-checklist.md @alexmnahas
-docs/release.md @alexmnahas
-package.json @alexmnahas
-pnpm-lock.yaml @alexmnahas
-pnpm-workspace.yaml @alexmnahas
-scripts/** @alexmnahas
-vite.config.ts @alexmnahas
+.github/** @MiguelsPizza @omarkawach
+.changeset/** @MiguelsPizza @omarkawach
+CODE_OF_CONDUCT.md @MiguelsPizza @omarkawach
+CONTRIBUTING.md @MiguelsPizza @omarkawach
+PRIVACY.md @MiguelsPizza @omarkawach
+SECURITY.md @MiguelsPizza @omarkawach
+SUPPORT.md @MiguelsPizza @omarkawach
+docs/open-source-checklist.md @MiguelsPizza @omarkawach
+docs/release.md @MiguelsPizza @omarkawach
+package.json @MiguelsPizza @omarkawach
+pnpm-lock.yaml @MiguelsPizza @omarkawach
+pnpm-workspace.yaml @MiguelsPizza @omarkawach
+scripts/** @MiguelsPizza @omarkawach
+vite.config.ts @MiguelsPizza @omarkawach
