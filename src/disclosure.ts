@@ -27,10 +27,7 @@ const isSkillReadArgumentObject = (
 /**
  * Stable error codes for progressive disclosure read failures.
  */
-export type SkillReadErrorCode =
-  | typeof ERROR_CODE_INVALID_ARGUMENT
-  | typeof ERROR_CODE_SKILL_NOT_FOUND
-  | typeof ERROR_CODE_RESOURCE_NOT_FOUND;
+export type SkillReadErrorCode = "INVALID_ARGUMENT" | "SKILL_NOT_FOUND" | "RESOURCE_NOT_FOUND";
 
 /**
  * Tool call arguments for skill progressive disclosure reads.

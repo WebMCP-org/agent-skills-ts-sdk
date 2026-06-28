@@ -11,6 +11,7 @@
     "opensrc",
     "publint",
     "typescript",
+    "typedoc-plugin-markdown",
     "vite-plus",
     "vitest"
   ],

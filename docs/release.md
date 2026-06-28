@@ -49,7 +49,6 @@ vp install
 vp check
 vp test run
 vp run validate:package
-vp run verify:packed-consumer
 ```
 
 `validate:package` builds, checks the packed file list, runs `publint`, and

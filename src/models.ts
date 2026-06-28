@@ -64,10 +64,11 @@ export interface SkillResource {
 }
 
 /**
- * Fully resolved in-memory skill used for progressive disclosure reads.
+ * Full skill content returned by a source.
  *
- * This model intentionally includes only pure data so it can be shared across
- * browser, server, and CLI hosts without coupling to storage or transport.
+ * `ResolvedSkill` keeps the parsed frontmatter fields together with the
+ * `SKILL.md` body and resource contents. It is pure data so browser, server,
+ * CLI, and storage-backed hosts can share the same read/disclosure path.
  *
  * @example
  * ```ts
@@ -80,16 +81,14 @@ export interface SkillResource {
  * ```
  * @see https://agentskills.io/specification
  */
-export interface ResolvedSkill {
-  /** Skill identifier from frontmatter. */
-  name: SkillFrontmatter["name"];
-  /** Skill description from frontmatter. */
-  description: SkillFrontmatter["description"];
-  /** Tier-2 instruction body from SKILL.md. */
+export interface ResolvedSkill<
+  TMetadata extends SkillMetadataMap = SkillMetadataMap,
+> extends SkillProperties<TMetadata> {
+  /** Markdown body after frontmatter removal. */
   body: SkillBody;
-  /** Tier-3 resources associated with this skill. */
+  /** Resource files resolved from links in the skill body or by a host source. */
   resources: SkillResource[];
-  /** Optional host location label (path/URL/etc). */
+  /** Host label such as a path, URL, or bundle location. */
   location?: string;
 }
 

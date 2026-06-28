@@ -54,6 +54,14 @@ export {
   readSkillProperties,
 } from "./parser.js";
 export type {
+  SkillDescriptor,
+  SkillRegistry,
+  SkillRegistrySnapshot,
+  SkillSource,
+  SkillSourceFromEntriesOptions,
+} from "./registry.js";
+export { createSkillRegistry, skillSourceFromEntries } from "./registry.js";
+export type {
   SkillDiffSegment,
   SkillDiffSegmentType,
   SkillLineDiff,
@@ -61,10 +69,13 @@ export type {
   SkillPatchApplyOptions,
   SkillPatchApplyResult,
   SkillPatchCreateOptions,
+  SkillPatchDeleteOperation,
+  SkillPatchInsertOperation,
   SkillPatchIssue,
   SkillPatchIssueCode,
   SkillPatchOperation,
   SkillPatchOperationType,
+  SkillPatchReplaceOperation,
   SkillPatchValidationResult,
 } from "./patch.js";
 
