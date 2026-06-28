@@ -1,6 +1,7 @@
 import { defineConfig } from "vite-plus";
 
 const ignoredGeneratedFiles = [
+  "API.md",
   "dist/**",
   "node_modules/**",
   "coverage/**",

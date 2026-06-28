@@ -59,12 +59,14 @@
     "test": "vp test",
     "test:run": "vp test run",
     "check": "vp check",
+    "docs:api": "typedoc --out .",
+    "docs:check": "tmp=$(mktemp -d) && typedoc --out \"$tmp\" && diff -u API.md \"$tmp/API.md\"; status=$?; rm -rf \"$tmp\"; exit $status",
     "reference:check": "node scripts/check-reference-drift.mjs --refresh",
     "reference:update": "node scripts/check-reference-drift.mjs --refresh --update",
     "typecheck": "tsc --noEmit",
     "test:coverage": "vp test run --coverage",
     "fallow:audit": "fallow audit --base origin/main --ci --fail-on-issues",
-    "validate:package": "vp run build && vp run verify:packed-files && publint && vp run verify:packed-consumer",
+    "validate:package": "vp run build && vp run docs:check && vp run verify:packed-files && publint && vp run verify:packed-consumer",
     "verify:packed-files": "node scripts/verify-packed-files.mjs",
     "verify:packed-consumer": "node scripts/verify-packed-consumer.mjs",
     "changeset:version": "changeset version && vp install --no-frozen-lockfile && vp fmt",
@@ -82,6 +84,8 @@
     "fallow": "2.70.0",
     "opensrc": "^0.7.2",
     "publint": "0.3.20",
+    "typedoc": "0.28.19",
+    "typedoc-plugin-markdown": "4.12.0",
     "typescript": "^5.8.3",
     "vite-plus": "catalog:",
     "vitest": "catalog:"
@@ -89,5 +93,17 @@
   "engines": {
     "node": ">=22.12"
   },
-  "packageManager": "pnpm@11.0.9"
+  "packageManager": "pnpm@11.0.9",
+  "typedocOptions": {
+    "plugin": [
+      "typedoc-plugin-markdown"
+    ],
+    "readme": "none",
+    "router": "module",
+    "entryFileName": "API",
+    "cleanOutputDir": false,
+    "disableSources": true,
+    "excludeExternals": true,
+    "treatValidationWarningsAsErrors": true
+  }
 }

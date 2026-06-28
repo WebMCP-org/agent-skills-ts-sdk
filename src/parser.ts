@@ -564,7 +564,7 @@ export interface ParseFrontmatterOptions {
 /**
  * Supported parse modes for frontmatter input handling.
  */
-export type ParseFrontmatterInputMode = typeof INPUT_MODE_STRICT | typeof INPUT_MODE_EMBEDDED;
+export type ParseFrontmatterInputMode = "strict" | "embedded";
 
 /**
  * Parsed resource reference discovered in a skill body markdown link.

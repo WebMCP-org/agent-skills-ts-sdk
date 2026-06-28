@@ -80,6 +80,3 @@ jobs:
 
       - name: Validate package shape
         run: vp run validate:package
-
-      - name: Verify packed ESM consumer
-        run: vp run verify:packed-consumer
