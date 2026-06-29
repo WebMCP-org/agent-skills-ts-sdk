@@ -1,5 +1,11 @@
 # agent-skills-ts-sdk
 
+## 2.4.2
+
+### Patch Changes
+
+- b5119c1: Externalize the `yaml` runtime dependency from the published bundle so Worker-oriented bundlers do not pre-analyze yaml's Node warning shim inside the SDK bundle.
+
 ## 2.4.1
 
 ### Patch Changes
