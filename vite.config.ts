@@ -26,10 +26,6 @@ export default defineConfig({
     target: "esnext",
     platform: "node",
     fixedExtension: false,
-    deps: {
-      alwaysBundle: ["yaml"],
-      onlyBundle: ["yaml"],
-    },
     tsconfig: "./tsconfig.json",
   },
   lint: {
