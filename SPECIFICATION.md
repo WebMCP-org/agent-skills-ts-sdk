@@ -62,17 +62,17 @@ Markdown content here...
 name: pdf-processing
 name: data-analysis
 name: code-review
-name: 技能          # Chinese
-name: мой-навык     # Russian with hyphens
+name: 技能 # Chinese
+name: мой-навык # Russian with hyphens
 ```
 
 **Invalid Examples**:
 
 ```yaml
-name: PDF-Processing      # uppercase not allowed
-name: -pdf                # cannot start with hyphen
-name: pdf--processing     # consecutive hyphens not allowed
-name: my_skill            # underscores not allowed
+name: PDF-Processing # uppercase not allowed
+name: -pdf # cannot start with hyphen
+name: pdf--processing # consecutive hyphens not allowed
+name: my_skill # underscores not allowed
 ```
 
 ### Description Field
