@@ -13,7 +13,6 @@ import type {
   SkillContent,
   SkillContentEntry,
   SkillFrontmatter,
-  SkillFrontmatterParseResult,
   SkillMetadataMap,
   SkillParseResult,
   SkillProperties,
@@ -247,7 +246,7 @@ const normalizeResourcePath = (path: string): string | null => {
   }
 
   const normalized = normalizeResourcePathText(path);
-  if (hasInvalidResourcePathShape(normalized)) {
+  if (isUnsupportedResourceTarget(normalized) || hasInvalidResourcePathShape(normalized)) {
     return null;
   }
 
@@ -264,7 +263,7 @@ const normalizeResourcePath = (path: string): string | null => {
 };
 
 const findFrontmatterEnd = (content: SkillContent): number => {
-  const delimiter = /^---[\t ]*\r?$/gm;
+  const delimiter = /(?<=\n)---[\t ]*(?=\r?\n|$)/g;
   delimiter.lastIndex = FRONTMATTER_DELIMITER_LENGTH;
   return delimiter.exec(content)?.index ?? -1;
 };
@@ -768,7 +767,7 @@ export function extractResourceLinks(body: SkillBody): ResourceLink[] {
 export function parseFrontmatter<TMetadata extends SkillMetadataMap = SkillMetadataMap>(
   content: SkillContent,
   options: ParseFrontmatterOptions = {},
-): SkillFrontmatterParseResult<TMetadata> {
+): SkillDocument<SkillFrontmatter<TMetadata> & Record<string, unknown>> {
   const { document, metadata, body } = parseYamlFrontmatter(content, options, false);
   return {
     metadata: toSkillFrontmatter<TMetadata>(

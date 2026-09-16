@@ -735,12 +735,6 @@ const frontmatter: SkillFrontmatter = {
 
 `TMetadata` *extends* [`SkillMetadataMap`](#skillmetadatamap) = [`SkillMetadataMap`](#skillmetadatamap)
 
-#### Indexable
-
-> \[`key`: `string`\]: `unknown`
-
-Host extension fields are retained and must be narrowed before use.
-
 #### Properties
 
 ##### allowed-tools?
@@ -2226,7 +2220,7 @@ A synchronous host rule. Return errors without mutating the parsed input.
 
 ##### metadata
 
-`Readonly`\<[`SkillFrontmatter`](#skillfrontmatter)\>
+`Readonly`\<[`SkillFrontmatter`](#skillfrontmatter) & `Record`\<`string`, `unknown`\>\>
 
 ##### body
 
@@ -2768,7 +2762,7 @@ const normalized = normalizeNFKC("cafe\u0301")
 
 ### parseFrontmatter()
 
-> **parseFrontmatter**\<`TMetadata`\>(`content`, `options?`): [`SkillFrontmatterParseResult`](#skillfrontmatterparseresult)\<`TMetadata`\>
+> **parseFrontmatter**\<`TMetadata`\>(`content`, `options?`): [`SkillDocument`](#skilldocument)\<[`SkillFrontmatter`](#skillfrontmatter)\<`TMetadata`\> & `Record`\<`string`, `unknown`\>\>
 
 Parse YAML frontmatter from SKILL.md content.
 
@@ -2794,7 +2788,7 @@ Optional parsing mode. Defaults to strict spec behavior.
 
 #### Returns
 
-[`SkillFrontmatterParseResult`](#skillfrontmatterparseresult)\<`TMetadata`\>
+[`SkillDocument`](#skilldocument)\<[`SkillFrontmatter`](#skillfrontmatter)\<`TMetadata`\> & `Record`\<`string`, `unknown`\>\>
 
 Parsed frontmatter metadata and trimmed markdown body.
 

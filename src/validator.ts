@@ -316,7 +316,7 @@ export function validateSkillProperties(
 
 /** A synchronous host rule. Return errors without mutating the parsed input. */
 export type SkillValidator = (
-  metadata: Readonly<SkillFrontmatter>,
+  metadata: Readonly<SkillFrontmatter & Record<string, unknown>>,
   body: SkillBody,
 ) => readonly string[];
 

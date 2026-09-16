@@ -249,3 +249,25 @@ it("treats delimiter text inside metadata as data, not the end of frontmatter", 
   expect(extractBody(content)).toBe("# Body\n---\nRule");
   expect(validateSkillContent(content)).toEqual([]);
 });
+
+it.each(["./C:/outside/secret.md", "././c:secret.md", "./https:remote.md", "./file:/etc/passwd"])(
+  "rejects absolute resource targets hidden by relative prefixes: %s",
+  async (path) => {
+    const { extractResourceLinks } = await import("../src/index");
+    expect(extractResourceLinks(`[secret](${path})`)).toEqual([]);
+  },
+);
+
+it.each(["\u2028", "\u2029"])(
+  "keeps Unicode separator %j inside YAML scalars",
+  async (separator) => {
+    const { parseFrontmatter, extractBody } = await import("../src/index");
+    const description = `before${separator}---${separator}after`;
+    for (const value of [description, `"${description}"`]) {
+      const content = `---\r\nname: demo\r\ndescription: ${value}\r\n---\t \r\n# Body`;
+      expect(parseFrontmatter(content).metadata.description).toBe(description);
+      expect(parseSkillDocument(content).metadata.description).toBe(description);
+      expect(extractBody(content)).toBe("# Body");
+    }
+  },
+);
