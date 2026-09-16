@@ -49,11 +49,11 @@ jobs:
       - name: Test with coverage
         run: vp run test:coverage
 
-      - name: Fallow audit
-        run: vp run fallow:audit
-
       - name: Build library
         run: vp pack
+
+      - name: Fallow audit
+        run: vp run fallow:audit
 
   package:
     name: Package integrity
