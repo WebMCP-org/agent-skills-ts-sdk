@@ -2,11 +2,12 @@
 
 [![CI](https://github.com/WebMCP-org/agent-skills-ts-sdk/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/WebMCP-org/agent-skills-ts-sdk/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/agent-skills-ts-sdk)](https://www.npmjs.com/package/agent-skills-ts-sdk)
-[![coverage thresholds](https://img.shields.io/badge/coverage-95%25%20lines%20%2F%2090%25%20branches-blue)](#development)
+[![coverage thresholds](https://img.shields.io/badge/coverage-98%25%20lines%20%2F%2095%25%20branches-blue)](#development)
 [![license](https://img.shields.io/npm/l/agent-skills-ts-sdk)](./LICENSE)
 
-TypeScript parser, validator, prompt, and patch utilities for Agent Skills
-`SKILL.md` files. The package tracks the [AgentSkills specification](https://agentskills.io/specification)
+TypeScript parsing, validation, and patch utilities for Agent Skills `SKILL.md`
+files. Bring your own metadata schema, extension validators, and model presentation.
+Prompt and disclosure helpers are optional. The package tracks the [AgentSkills specification](https://agentskills.io/specification)
 and the Python [`skills-ref`](https://github.com/agentskills/agentskills/tree/main/skills-ref)
 reference behavior.
 
@@ -51,6 +52,66 @@ const errors = validateSkillContent(content);
 Use `{ inputMode: "embedded" }` when SKILL.md text comes from a DOM/script tag
 and may start with a newline.
 
+### Bring your own metadata schema
+
+`parseSkillDocument` separates YAML parsing from field validation. It preserves
+unknown fields, nested metadata, arrays, booleans, and numbers. It does not require
+`name` or `description`, so its result is not a claim of AgentSkills conformance.
+
+```typescript
+import { parseSkillDocument } from "agent-skills-ts-sdk";
+
+const document = parseSkillDocument(content); // metadata: Record<string, unknown>
+
+const typed = parseSkillDocument("---\nversion: 2\n---\nInstructions", {
+  parseMetadata(value) {
+    if (typeof value.version !== "number") {
+      throw new Error("version must be a number");
+    }
+    return { version: value.version };
+  },
+});
+// typed.metadata.version is number; schema errors propagate to the caller.
+```
+
+Pass a schema library's parser as `parseMetadata: (value) => schema.parse(value)`.
+The SDK adds no schema dependency. Flow collections are supported by this parser;
+anchors, aliases, and explicit YAML tags are rejected.
+
+Use `parseFrontmatter` for normalized spec fields and string-valued `metadata`.
+It also retains top-level extension fields, typed as `unknown` until narrowed.
+`parseSkillContent` returns only canonical, camel-cased properties and the body.
+
+### Extend validation
+
+```typescript
+import { applySkillPatch, validateSkillContent, type SkillValidator } from "agent-skills-ts-sdk";
+
+const requireVersion: SkillValidator = (frontmatter) =>
+  frontmatter.version === 2 ? [] : ["version must be 2"];
+
+const validation = {
+  allowedFields: ["version"],
+  validators: [requireVersion],
+};
+const errors = validateSkillContent(content, validation);
+const result = applySkillPatch(content, patch, { validate: validation });
+```
+
+Validation rejects unknown fields by default. `allowedFields` declares specific
+extensions; `unknownFields: "allow"` accepts all extra fields. Both keep the core
+AgentSkills rules, including string-valued `metadata`. To change those field
+shapes, use `parseSkillDocument` with your own schema instead.
+
+Validators receive normalized frontmatter and the trimmed body. They run
+synchronously in order after parsing succeeds, alongside core validation, and
+must not mutate the input. Each returns error strings; a thrown error becomes a
+`Validator failed: ...` error without discarding other diagnostics. No plugin
+registration or global state is needed.
+
+The same options work with `validateSkillEntries` and patch validation, including
+`expectedName` and `inputMode: "embedded"`.
+
 ### Validate in-memory files
 
 ```typescript
@@ -77,6 +138,10 @@ const readTool = registry.readTool({
   toolName: "read_site_context",
 });
 ```
+
+Use `registry.list()` to get a copy of the catalog and render your own prompt,
+UI, or tool protocol. Reading and loading skills do not require the generated
+prompt or read-tool schema.
 
 Model-facing shape:
 
@@ -144,7 +209,7 @@ const result = applySkillPatch(oldContent, patch);
 
 ## API Shape
 
-- Parsing: `parseFrontmatter`, `parseSkillContent`, `extractBody`,
+- Parsing: `parseSkillDocument`, `parseFrontmatter`, `parseSkillContent`, `extractBody`,
   `frontmatterToProperties`, `extractResourceLinks`.
 - Validation: `validateSkillProperties`, `validateSkillContent`,
   `validateSkillEntries`.
@@ -163,7 +228,9 @@ See [API.md](./API.md) for the full module reference.
 ## Spec Notes
 
 Required fields are `name` and `description`. Optional fields are `license`,
-`compatibility`, `metadata`, and experimental `allowed-tools`.
+`compatibility`, `metadata`, and experimental `allowed-tools`. Explicit Markdown
+resource links can target any skill-local directory; traversal and external URLs
+are rejected. Bare path detection uses conventional resource directories.
 
 Directory-level checks are exposed through `validateSkillEntries` so filesystem,
 Durable Object, and other storage hosts can use the same validation rules.
@@ -183,7 +250,14 @@ and rendered Markdown examples in the browser.
 vp test
 vp check
 vp run test:coverage
+vp run benchmark
 ```
+
+Coverage is enforced in CI at 98% lines/statements/functions and 95% branches.
+Benchmarks report median microseconds per operation; compare a previous bundle
+with `node scripts/benchmark.mjs /path/to/previous/index.js` after building.
+Vitest 4 matches Vite+'s bundled test runner; TypeScript 6 matches TypeDoc's
+supported compiler range.
 
 ## References
 

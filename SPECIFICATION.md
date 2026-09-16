@@ -1,9 +1,9 @@
 # AgentSkills Specification Reference
 
-This document contains the complete AgentSkills specification for reference during development and maintenance.
+This document summarizes the AgentSkills specification and this SDK’s behavior for reference during development and maintenance.
 
 **Official Specification**: https://agentskills.io/specification
-**Last Updated**: 2026-01-14
+**Last Updated**: 2026-09-16
 **Reference Implementation**: https://github.com/agentskills/agentskills/tree/main/skills-ref
 
 ---
@@ -133,6 +133,10 @@ Skills use a three-tier loading strategy:
 
 ## Directory Structure
 
+The specification permits any additional files and directories. The directories
+below are conventions, not an allowlist. The reference lock records upstream
+commit `69ef37e9424c0a7ea9dd2293b559e43ec8176379`.
+
 ```
 skill-name/
 ├── SKILL.md           # Required
@@ -146,16 +150,22 @@ skill-name/
     └── schema.yaml
 ```
 
-## Frontmatter Parsing Rules
+## Canonical Frontmatter Parsing Rules
 
 1. File must start with `---`
-2. Frontmatter must be closed with second `---`
+2. Frontmatter must be closed with `---` on its own line
 3. YAML must be valid mapping (object)
 4. Required fields (`name`, `description`) must be present
 5. Required fields must be non-empty strings
 6. Names and descriptions are trimmed
 7. Metadata values are converted to strings
 8. Optional fields must match their specified types
+
+The rules above describe `parseFrontmatter` and `parseSkillContent`.
+`parseSkillDocument` is a separate syntax-only API that preserves YAML types and
+accepts a host schema parser. It does not enforce AgentSkills conformance.
+Strict validation remains the default; hosts may allow extra top-level fields
+and supply additional validators. These extensions do not replace core rules.
 
 ## Body Content
 

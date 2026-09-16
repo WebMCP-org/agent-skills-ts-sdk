@@ -72,3 +72,17 @@ describe("ValidationError", () => {
     expect(validationError).not.toBeInstanceOf(ParseError);
   });
 });
+
+it("constructs errors in runtimes without V8 stack capture", () => {
+  const descriptor = Object.getOwnPropertyDescriptor(Error, "captureStackTrace")!;
+  try {
+    Object.defineProperty(Error, "captureStackTrace", { value: undefined, configurable: true });
+    expect(new ParseError("parse")).toMatchObject({ name: "ParseError", message: "parse" });
+    expect(new ValidationError("validate")).toMatchObject({
+      name: "ValidationError",
+      message: "validate",
+    });
+  } finally {
+    Object.defineProperty(Error, "captureStackTrace", descriptor);
+  }
+});

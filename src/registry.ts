@@ -202,6 +202,8 @@ export function skillSourceFromEntries(
  * registry.
  */
 export interface SkillRegistry {
+  /** Return a copy of catalog data for host-defined rendering or tool protocols. */
+  list(): SkillDescriptor[];
   /** Non-fatal diagnostics from the most recent load or refresh. */
   readonly warnings: string[];
   /** Combined `${source.id}:${source.fingerprint}` value for the loaded sources. */
@@ -283,6 +285,7 @@ export async function createSkillRegistry(sources: SkillSource[]): Promise<Skill
   };
 
   const registry: SkillRegistry = {
+    list: () => structuredClone([...descriptors.values()]),
     warnings,
     get fingerprint() {
       return fingerprint();

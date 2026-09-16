@@ -19,7 +19,6 @@ import type {
   SkillProperties,
   SkillResource,
 } from "./models.js";
-import { entriesToRecord } from "./utils/objects.js";
 
 const FRONTMATTER_DELIMITER = "---";
 const FRONTMATTER_DELIMITER_LENGTH = FRONTMATTER_DELIMITER.length;
@@ -54,7 +53,6 @@ const RESOURCE_PATH_SEGMENTS = [
   "agents",
   "eval-viewer",
 ] as const;
-const RESOURCE_PATH_SEGMENT_SET = new Set<string>(RESOURCE_PATH_SEGMENTS);
 const RESOURCE_PATH_PREFIXES = RESOURCE_PATH_SEGMENTS.map((segment) => `${segment}/`);
 const BARE_RESOURCE_TRAILING_PUNCTUATION = ".,;:!*";
 const BARE_RESOURCE_PATH_TERMINATORS = new Set(["`", "<", ">", '"', "'", ")", "]", "}"]);
@@ -237,13 +235,6 @@ const normalizeResourcePathText = (path: string): string => {
   return normalized;
 };
 
-const isAllowedNestedResourcePath = (segments: string[]): boolean => {
-  if (segments.length < 2 || !RESOURCE_PATH_SEGMENT_SET.has(segments[0] ?? "")) {
-    return false;
-  }
-  return segments.every((segment) => segment !== "." && segment !== "..");
-};
-
 /**
  * Normalizes and validates a markdown link path as a skill resource path.
  *
@@ -265,11 +256,17 @@ const normalizeResourcePath = (path: string): string | null => {
     return ROOT_RESOURCE_FILE_PATTERN.test(normalized) ? normalized : null;
   }
 
-  if (!isAllowedNestedResourcePath(segments)) {
+  if (segments.some((segment) => segment === "." || segment === "..")) {
     return null;
   }
 
   return segments.join("/");
+};
+
+const findFrontmatterEnd = (content: SkillContent): number => {
+  const delimiter = /^---[\t ]*\r?$/gm;
+  delimiter.lastIndex = FRONTMATTER_DELIMITER_LENGTH;
+  return delimiter.exec(content)?.index ?? -1;
 };
 
 /**
@@ -425,7 +422,7 @@ const extractMetadataStringMap = (document: Document.Parsed): SkillMetadataMap |
     throw new ValidationError("Field 'metadata' must be a YAML mapping");
   }
 
-  return entriesToRecord(metadataPair.value.items.map(metadataItemToStringEntry));
+  return Object.fromEntries(metadataPair.value.items.map(metadataItemToStringEntry));
 };
 
 const findFrontmatterPair = (
@@ -480,7 +477,7 @@ const metadataItemToStringEntry = (item: YAMLMap["items"][number]): [string, str
   return [item.key.value, formatMetadataScalar(item.value)];
 };
 
-const hasUnsupportedStrictYamlFeature = (document: Document.Parsed): boolean => {
+const hasUnsupportedYamlFeature = (document: Document.Parsed, allowFlow: boolean): boolean => {
   let unsupported = false;
   const reject = (): symbol => {
     unsupported = true;
@@ -490,7 +487,9 @@ const hasUnsupportedStrictYamlFeature = (document: Document.Parsed): boolean => 
   YAML.visit(document, {
     Alias: reject,
     Collection: (_key, node) =>
-      node.flow === true || typeof node.anchor === "string" || typeof node.tag === "string"
+      (!allowFlow && node.flow === true) ||
+      typeof node.anchor === "string" ||
+      typeof node.tag === "string"
         ? reject()
         : undefined,
     Scalar: (_key, node) =>
@@ -535,7 +534,7 @@ export function findSkillMdFile<T extends Pick<SkillContentEntry, "name">>(
 /**
  * Options for `readSkillProperties`.
  */
-export interface ReadSkillPropertiesOptions {
+export interface ReadSkillPropertiesOptions extends ParseFrontmatterOptions {
   /** Optional label used in parse errors when `SKILL.md` is missing. */
   location?: string;
 }
@@ -568,7 +567,7 @@ export function readSkillProperties<
     throw new ParseError(`SKILL.md not found${locationLabel}`);
   }
 
-  const { properties } = parseSkillContent<TMetadata>(skillFile.content);
+  const { properties } = parseSkillContent<TMetadata>(skillFile.content, options);
   return properties;
 }
 
@@ -604,8 +603,8 @@ export function frontmatterToProperties<TMetadata extends SkillMetadataMap = Ski
 /**
  * Frontmatter parser options.
  *
- * `strict` follows the specification and reference parser behavior exactly:
- * content must start with `---`.
+ * `strict` requires content to start with `---`. Closing delimiters must be
+ * on their own line, so delimiter text inside scalar values is preserved.
  *
  * `embedded` is an explicit host opt-in for web extraction contexts where
  * content may have a leading BOM or whitespace before frontmatter.
@@ -630,7 +629,7 @@ export type ParseFrontmatterInputMode = "strict" | "embedded";
 export interface ResourceLink {
   /** Display identifier from markdown link text. */
   name: SkillResource["name"];
-  /** Canonical resource path under an observed skill-local resource directory. */
+  /** Canonical relative path within the skill directory. */
   path: SkillResource["path"];
 }
 
@@ -724,7 +723,8 @@ const collectBareResourceLinks = (
 /**
  * Extracts tier-3 resource links from skill body markdown.
  *
- * Only links to observed skill-local resource directories are returned.
+ * Explicit Markdown links may reference any skill-local directory.
+ * Bare paths are discovered under conventional resource directories.
  * External URLs, anchors, and path traversal references are ignored.
  * Leading `./` is accepted and normalized away.
  *
@@ -760,7 +760,7 @@ export function extractResourceLinks(body: SkillBody): ResourceLink[] {
  *
  * Spec: https://agentskills.io/specification
  * - File must start with `---`
- * - Frontmatter must be closed with second `---`
+ * - Frontmatter must be closed with `---` on its own line
  * - YAML must be valid mapping (object)
  * - Required fields: name, description
  * - Required fields must be non-empty strings
@@ -769,6 +769,30 @@ export function parseFrontmatter<TMetadata extends SkillMetadataMap = SkillMetad
   content: SkillContent,
   options: ParseFrontmatterOptions = {},
 ): SkillFrontmatterParseResult<TMetadata> {
+  const { document, metadata, body } = parseYamlFrontmatter(content, options, false);
+  return {
+    metadata: toSkillFrontmatter<TMetadata>(
+      metadata,
+      extractMetadataStringMap(document),
+      extractFrontmatterScalarSourceStrings(document),
+    ),
+    body,
+  };
+}
+
+/** A parsed document before Agent Skills field validation or normalization. */
+export interface SkillDocument<TMetadata = Record<string, unknown>> {
+  /** Frontmatter, with YAML value types preserved. */
+  metadata: TMetadata;
+  /** Trimmed Markdown body. The host controls presentation. */
+  body: SkillBody;
+}
+
+const parseYamlFrontmatter = (
+  content: SkillContent,
+  options: ParseFrontmatterOptions,
+  allowFlow: boolean,
+): SkillDocument & { document: Document.Parsed } => {
   const normalizedContent = normalizeContentForMode(
     content,
     options.inputMode ?? INPUT_MODE_STRICT,
@@ -778,10 +802,7 @@ export function parseFrontmatter<TMetadata extends SkillMetadataMap = SkillMetad
     throw new ParseError("SKILL.md must start with YAML frontmatter (---)");
   }
 
-  const secondDelimiter = normalizedContent.indexOf(
-    FRONTMATTER_DELIMITER,
-    FRONTMATTER_DELIMITER_LENGTH,
-  );
+  const secondDelimiter = findFrontmatterEnd(normalizedContent);
 
   if (secondDelimiter === -1) {
     throw new ParseError("SKILL.md frontmatter not properly closed with ---");
@@ -796,24 +817,49 @@ export function parseFrontmatter<TMetadata extends SkillMetadataMap = SkillMetad
     throw new ParseError(`Invalid YAML in frontmatter: ${errorMessage}`);
   }
 
-  if (hasUnsupportedStrictYamlFeature(document)) {
+  if (hasUnsupportedYamlFeature(document, allowFlow)) {
     throw new ParseError(
-      "Invalid YAML in frontmatter: flow collections, anchors, aliases, and tags are not supported",
+      allowFlow
+        ? "Invalid YAML in frontmatter: anchors, aliases, and tags are not supported"
+        : "Invalid YAML in frontmatter: flow collections, anchors, aliases, and tags are not supported",
     );
   }
 
-  const metadataMap = extractMetadataStringMap(document);
-  const sourceStrings = extractFrontmatterScalarSourceStrings(document);
-  const rawMetadata = document.toJSON();
-
+  const rawMetadata: unknown = document.toJSON();
   if (!isRecord(rawMetadata)) {
     throw new ParseError("SKILL.md frontmatter must be a YAML mapping");
   }
+  return { document, metadata: rawMetadata, body };
+};
 
-  const metadataObject = rawMetadata;
+/** Host schema parser for document metadata. */
+export interface ParseSkillDocumentOptions<TMetadata> extends ParseFrontmatterOptions {
+  /** Validate or transform raw frontmatter. Errors propagate to the caller. */
+  parseMetadata: (metadata: Record<string, unknown>) => TMetadata;
+}
 
+/**
+ * Parse a document without requiring Agent Skills fields or a metadata schema.
+ *
+ * Preserves unknown fields and YAML scalar, map, and sequence values. Flow
+ * collections are accepted; anchors, aliases, and explicit tags are rejected.
+ * Use `parseFrontmatter` for normalized Agent Skills fields and string metadata.
+ */
+export function parseSkillDocument<TMetadata>(
+  content: SkillContent,
+  options: ParseSkillDocumentOptions<TMetadata>,
+): SkillDocument<TMetadata>;
+export function parseSkillDocument(
+  content: SkillContent,
+  options?: ParseFrontmatterOptions,
+): SkillDocument;
+export function parseSkillDocument(
+  content: SkillContent,
+  options: ParseFrontmatterOptions | ParseSkillDocumentOptions<unknown> = {},
+): SkillDocument<unknown> {
+  const { metadata, body } = parseYamlFrontmatter(content, options, true);
   return {
-    metadata: toSkillFrontmatter<TMetadata>(metadataObject, metadataMap, sourceStrings),
+    metadata: "parseMetadata" in options ? options.parseMetadata(metadata) : metadata,
     body,
   };
 }
@@ -837,7 +883,7 @@ export function extractBody(content: SkillContent): SkillBody {
     return content.trim();
   }
 
-  const secondDelimiter = content.indexOf(FRONTMATTER_DELIMITER, FRONTMATTER_DELIMITER_LENGTH);
+  const secondDelimiter = findFrontmatterEnd(content);
 
   if (secondDelimiter === -1) {
     return content.trim();

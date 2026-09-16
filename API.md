@@ -178,11 +178,17 @@ Optional tier-3 resource names exposed as prompt hints.
 
 Frontmatter parser options.
 
-`strict` follows the specification and reference parser behavior exactly:
-content must start with `---`.
+`strict` requires content to start with `---`. Closing delimiters must be
+on their own line, so delimiter text inside scalar values is preserved.
 
 `embedded` is an explicit host opt-in for web extraction contexts where
 content may have a leading BOM or whitespace before frontmatter.
+
+#### Extended by
+
+- [`ParseSkillDocumentOptions`](#parseskilldocumentoptions)
+- [`ReadSkillPropertiesOptions`](#readskillpropertiesoptions)
+- [`ValidateSkillContentOptions`](#validateskillcontentoptions)
 
 #### Properties
 
@@ -196,11 +202,73 @@ Input handling mode.
 
 ***
 
+### ParseSkillDocumentOptions
+
+Host schema parser for document metadata.
+
+#### Extends
+
+- [`ParseFrontmatterOptions`](#parsefrontmatteroptions)
+
+#### Type Parameters
+
+##### TMetadata
+
+`TMetadata`
+
+#### Properties
+
+##### inputMode?
+
+> `optional` **inputMode?**: [`ParseFrontmatterInputMode`](#parsefrontmatterinputmode)
+
+Input handling mode.
+- `strict` (default): parse exactly as provided.
+- `embedded`: remove UTF-8 BOM and leading whitespace before strict parse.
+
+###### Inherited from
+
+[`ParseFrontmatterOptions`](#parsefrontmatteroptions).[`inputMode`](#inputmode)
+
+##### parseMetadata
+
+> **parseMetadata**: (`metadata`) => `TMetadata`
+
+Validate or transform raw frontmatter. Errors propagate to the caller.
+
+###### Parameters
+
+###### metadata
+
+`Record`\<`string`, `unknown`\>
+
+###### Returns
+
+`TMetadata`
+
+***
+
 ### ReadSkillPropertiesOptions
 
 Options for `readSkillProperties`.
 
+#### Extends
+
+- [`ParseFrontmatterOptions`](#parsefrontmatteroptions)
+
 #### Properties
+
+##### inputMode?
+
+> `optional` **inputMode?**: [`ParseFrontmatterInputMode`](#parsefrontmatterinputmode)
+
+Input handling mode.
+- `strict` (default): parse exactly as provided.
+- `embedded`: remove UTF-8 BOM and leading whitespace before strict parse.
+
+###### Inherited from
+
+[`ParseFrontmatterOptions`](#parsefrontmatteroptions).[`inputMode`](#inputmode)
 
 ##### location?
 
@@ -354,7 +422,7 @@ Optional string metadata map.
 
 ###### Inherited from
 
-[`SkillProperties`](#skillproperties).[`metadata`](#metadata-5)
+[`SkillProperties`](#skillproperties).[`metadata`](#metadata-6)
 
 ##### name
 
@@ -390,7 +458,7 @@ Display identifier from markdown link text.
 
 > **path**: `string`
 
-Canonical resource path under an observed skill-local resource directory.
+Canonical relative path within the skill directory.
 
 ***
 
@@ -547,6 +615,32 @@ https://agentskills.io/specification
 
 ***
 
+### SkillDocument
+
+A parsed document before Agent Skills field validation or normalization.
+
+#### Type Parameters
+
+##### TMetadata
+
+`TMetadata` = `Record`\<`string`, `unknown`\>
+
+#### Properties
+
+##### body
+
+> **body**: `string`
+
+Trimmed Markdown body. The host controls presentation.
+
+##### metadata
+
+> **metadata**: `TMetadata`
+
+Frontmatter, with YAML value types preserved.
+
+***
+
 ### SkillFile
 
 Full skill record suitable for storage in an app-owned persistence layer.
@@ -640,6 +734,12 @@ const frontmatter: SkillFrontmatter = {
 ##### TMetadata
 
 `TMetadata` *extends* [`SkillMetadataMap`](#skillmetadatamap) = [`SkillMetadataMap`](#skillmetadatamap)
+
+#### Indexable
+
+> \[`key`: `string`\]: `unknown`
+
+Host extension fields are retained and must be narrowed before use.
 
 #### Properties
 
@@ -940,7 +1040,7 @@ https://agentskills.io/specification
 
 ##### validate?
 
-> `optional` **validate?**: `boolean` \| [`ValidateSkillPropertiesOptions`](#validateskillpropertiesoptions)
+> `optional` **validate?**: `boolean` \| [`ValidateSkillContentOptions`](#validateskillcontentoptions)
 
 ***
 
@@ -1434,6 +1534,16 @@ Non-fatal diagnostics from the most recent load or refresh.
 
 #### Methods
 
+##### list()
+
+> **list**(): [`SkillDescriptor`](#skilldescriptor)[]
+
+Return a copy of catalog data for host-defined rendering or tool protocols.
+
+###### Returns
+
+[`SkillDescriptor`](#skilldescriptor)[]
+
 ##### loadSkill()
 
 > **loadSkill**(`name`): `Promise`\<[`ResolvedSkill`](#resolvedskill)\<[`SkillMetadataMap`](#skillmetadatamap)\> \| `null`\>
@@ -1722,7 +1832,21 @@ const options: SkillValidationOptions = {
  - https://agentskills.io/specification
  - https://github.com/agentskills/agentskills/blob/main/skills-ref/src/skills_ref/validator.py
 
+#### Extends
+
+- [`ValidateSkillContentOptions`](#validateskillcontentoptions)
+
 #### Properties
+
+##### allowedFields?
+
+> `optional` **allowedFields?**: readonly `string`[]
+
+Additional top-level fields accepted by this host. Core rules still apply.
+
+###### Inherited from
+
+[`ValidateSkillContentOptions`](#validateskillcontentoptions).[`allowedFields`](#allowedfields-1)
 
 ##### exists?
 
@@ -1736,6 +1860,22 @@ Whether the host path exists.
 
 Expected skill name (for example, directory or slug match).
 
+###### Inherited from
+
+[`ValidateSkillContentOptions`](#validateskillcontentoptions).[`expectedName`](#expectedname-1)
+
+##### inputMode?
+
+> `optional` **inputMode?**: [`ParseFrontmatterInputMode`](#parsefrontmatterinputmode)
+
+Input handling mode.
+- `strict` (default): parse exactly as provided.
+- `embedded`: remove UTF-8 BOM and leading whitespace before strict parse.
+
+###### Inherited from
+
+[`ValidateSkillContentOptions`](#validateskillcontentoptions).[`inputMode`](#inputmode-4)
+
 ##### isDirectory?
 
 > `optional` **isDirectory?**: `boolean`
@@ -1748,11 +1888,91 @@ Whether the host path is a directory.
 
 Optional location label included in error messages.
 
+##### unknownFields?
+
+> `optional` **unknownFields?**: `"reject"` \| `"allow"`
+
+Reject undeclared fields by default, or allow all host extension fields.
+
+###### Inherited from
+
+[`ValidateSkillContentOptions`](#validateskillcontentoptions).[`unknownFields`](#unknownfields-1)
+
+##### validators?
+
+> `optional` **validators?**: readonly [`SkillValidator`](#skillvalidator)[]
+
+Additional rules run in order after parsing. Exceptions become validation errors.
+
+###### Inherited from
+
+[`ValidateSkillContentOptions`](#validateskillcontentoptions).[`validators`](#validators-1)
+
+***
+
+### ValidateSkillContentOptions
+
+Validation rules for content, in addition to the standard Agent Skills fields.
+
+#### Extends
+
+- [`ValidateSkillPropertiesOptions`](#validateskillpropertiesoptions).[`ParseFrontmatterOptions`](#parsefrontmatteroptions)
+
+#### Extended by
+
+- [`SkillValidationOptions`](#skillvalidationoptions)
+
+#### Properties
+
+##### allowedFields?
+
+> `optional` **allowedFields?**: readonly `string`[]
+
+Additional top-level fields accepted by this host. Core rules still apply.
+
+##### expectedName?
+
+> `optional` **expectedName?**: `string`
+
+Expected skill name (for example, directory or slug match).
+
+###### Inherited from
+
+[`ValidateSkillPropertiesOptions`](#validateskillpropertiesoptions).[`expectedName`](#expectedname-2)
+
+##### inputMode?
+
+> `optional` **inputMode?**: [`ParseFrontmatterInputMode`](#parsefrontmatterinputmode)
+
+Input handling mode.
+- `strict` (default): parse exactly as provided.
+- `embedded`: remove UTF-8 BOM and leading whitespace before strict parse.
+
+###### Inherited from
+
+[`ParseFrontmatterOptions`](#parsefrontmatteroptions).[`inputMode`](#inputmode)
+
+##### unknownFields?
+
+> `optional` **unknownFields?**: `"reject"` \| `"allow"`
+
+Reject undeclared fields by default, or allow all host extension fields.
+
+##### validators?
+
+> `optional` **validators?**: readonly [`SkillValidator`](#skillvalidator)[]
+
+Additional rules run in order after parsing. Exceptions become validation errors.
+
 ***
 
 ### ValidateSkillPropertiesOptions
 
 Optional host-level constraints for `validateSkillProperties`.
+
+#### Extended by
+
+- [`ValidateSkillContentOptions`](#validateskillcontentoptions)
 
 #### Properties
 
@@ -1993,6 +2213,28 @@ const tokens: SkillTokenCount = 120
 #### See
 
 https://agentskills.io/specification
+
+***
+
+### SkillValidator
+
+> **SkillValidator** = (`metadata`, `body`) => readonly `string`[]
+
+A synchronous host rule. Return errors without mutating the parsed input.
+
+#### Parameters
+
+##### metadata
+
+`Readonly`\<[`SkillFrontmatter`](#skillfrontmatter)\>
+
+##### body
+
+[`SkillBody`](#skillbody)
+
+#### Returns
+
+readonly `string`[]
 
 ***
 
@@ -2346,7 +2588,8 @@ If content doesn't have valid frontmatter, returns the content as-is.
 
 Extracts tier-3 resource links from skill body markdown.
 
-Only links to observed skill-local resource directories are returned.
+Explicit Markdown links may reference any skill-local directory.
+Bare paths are discovered under conventional resource directories.
 External URLs, anchors, and path traversal references are ignored.
 Leading `./` is accepted and normalized away.
 
@@ -2580,7 +2823,7 @@ description: Demo skill
 
 Spec: https://agentskills.io/specification
 - File must start with `---`
-- Frontmatter must be closed with second `---`
+- Frontmatter must be closed with `---` on its own line
 - YAML must be valid mapping (object)
 - Required fields: name, description
 - Required fields must be non-empty strings
@@ -2643,6 +2886,64 @@ description: Demo skill
  - https://github.com/agentskills/agentskills/blob/main/skills-ref/src/skills_ref/parser.py
 
 Spec: https://agentskills.io/specification
+
+***
+
+### parseSkillDocument()
+
+#### Call Signature
+
+> **parseSkillDocument**\<`TMetadata`\>(`content`, `options`): [`SkillDocument`](#skilldocument)\<`TMetadata`\>
+
+Parse a document without requiring Agent Skills fields or a metadata schema.
+
+Preserves unknown fields and YAML scalar, map, and sequence values. Flow
+collections are accepted; anchors, aliases, and explicit tags are rejected.
+Use `parseFrontmatter` for normalized Agent Skills fields and string metadata.
+
+##### Type Parameters
+
+###### TMetadata
+
+`TMetadata`
+
+##### Parameters
+
+###### content
+
+`string`
+
+###### options
+
+[`ParseSkillDocumentOptions`](#parseskilldocumentoptions)\<`TMetadata`\>
+
+##### Returns
+
+[`SkillDocument`](#skilldocument)\<`TMetadata`\>
+
+#### Call Signature
+
+> **parseSkillDocument**(`content`, `options?`): [`SkillDocument`](#skilldocument)
+
+Parse a document without requiring Agent Skills fields or a metadata schema.
+
+Preserves unknown fields and YAML scalar, map, and sequence values. Flow
+collections are accepted; anchors, aliases, and explicit tags are rejected.
+Use `parseFrontmatter` for normalized Agent Skills fields and string metadata.
+
+##### Parameters
+
+###### content
+
+`string`
+
+###### options?
+
+[`ParseFrontmatterOptions`](#parsefrontmatteroptions)
+
+##### Returns
+
+[`SkillDocument`](#skilldocument)
 
 ***
 
@@ -2916,7 +3217,7 @@ Tool declaration object with `parametersJsonSchema`.
 
 ### validateSkillContent()
 
-> **validateSkillContent**(`content`): `string`[]
+> **validateSkillContent**(`content`, `options?`): `string`[]
 
 Validate complete SKILL.md content.
 
@@ -2929,6 +3230,10 @@ Parses the content and validates the resulting properties.
 `string`
 
 Raw SKILL.md content
+
+##### options?
+
+[`ValidateSkillContentOptions`](#validateskillcontentoptions) = `{}`
 
 #### Returns
 

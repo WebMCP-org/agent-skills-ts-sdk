@@ -211,6 +211,8 @@ export type SkillFrontmatterKey = (typeof SKILL_FRONTMATTER_KEYS)[number];
  * @see https://github.com/agentskills/agentskills/blob/main/skills-ref/src/skills_ref/models.py
  */
 export interface SkillFrontmatter<TMetadata extends SkillMetadataMap = SkillMetadataMap> {
+  /** Host extension fields are retained and must be narrowed before use. */
+  [key: string]: unknown;
   /** Required skill identifier. */
   name: string;
   /** Required skill description. */

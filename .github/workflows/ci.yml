@@ -46,11 +46,11 @@ jobs:
       - name: Check
         run: vp check
 
+      - name: Test with coverage
+        run: vp run test:coverage
+
       - name: Fallow audit
         run: vp run fallow:audit
-
-      - name: Test
-        run: vp test run
 
       - name: Build library
         run: vp pack

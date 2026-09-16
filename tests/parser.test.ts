@@ -793,7 +793,7 @@ Read references/REFERENCE.md, then use ./assets/template.json`;
 - [invalid-traversal1](../references/nope)
 - [invalid-traversal2](references/../nope)
 - [invalid-backslash](references\\nope)
-- [invalid-dir](docs/nope)
+- [invalid-dir](docs/../nope)
 - [invalid-url](https://example.com/ref)
 - [invalid-anchor](#local)
 - [broken](references/missing

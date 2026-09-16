@@ -6,11 +6,8 @@
  */
 
 import type { SkillContent } from "./models.js";
-import { frontmatterToProperties, parseFrontmatter } from "./parser.js";
-import type { ValidateSkillPropertiesOptions } from "./validator.js";
-import { validateSkillContent, validateSkillProperties } from "./validator.js";
-
-type SkillNameExpectation = NonNullable<ValidateSkillPropertiesOptions["expectedName"]>;
+import type { ValidateSkillContentOptions } from "./validator.js";
+import { validateSkillContent } from "./validator.js";
 
 /**
  * Supported patch operation types.
@@ -179,7 +176,7 @@ export interface SkillPatchValidationResult {
  */
 export interface SkillPatchApplyOptions {
   expectedMatches?: number;
-  validate?: boolean | ValidateSkillPropertiesOptions;
+  validate?: boolean | ValidateSkillContentOptions;
 }
 
 /**
@@ -326,6 +323,48 @@ const toValidationErrors = (result: SkillPatchValidationResult): SkillPatchIssue
       message: "Patch validation failed without structured error details.",
     }),
   ];
+};
+
+const normalizeInsertOperation = (
+  operation: Record<string, unknown>,
+  index: number,
+): SkillPatchInsertOperation | SkillPatchIssue => {
+  if (!isNonEmptyString(operation.anchor)) {
+    return createIssue({
+      code: "OPERATION_TARGET_EMPTY",
+      message: `Operation ${index} (insert) requires a non-empty anchor string.`,
+      operationIndex: index,
+      operationType: "insert",
+      field: "anchor",
+    });
+  }
+  if (!isNonEmptyString(operation.text)) {
+    return createIssue({
+      code: "OPERATION_INVALID",
+      message: `Operation ${index} (insert) requires a non-empty text value.`,
+      operationIndex: index,
+      operationType: "insert",
+      field: "text",
+    });
+  }
+  if (operation.position !== undefined && !isInsertPosition(operation.position)) {
+    return createIssue({
+      code: "OPERATION_INVALID_POSITION",
+      message: `Operation ${index} (insert) position must be "before" or "after".`,
+      operationIndex: index,
+      operationType: "insert",
+      field: "position",
+    });
+  }
+  const position = isInsertPosition(operation.position) ? operation.position : undefined;
+  const expectedMatches = toExpectedMatches(operation.expectedMatches);
+  return {
+    type: "insert",
+    anchor: operation.anchor,
+    text: operation.text,
+    ...(position !== undefined && { position }),
+    ...(expectedMatches !== undefined && { expectedMatches }),
+  };
 };
 
 const validateExpectedMatches = (
@@ -489,51 +528,12 @@ export function validateSkillPatch(patch: unknown): SkillPatchValidationResult {
     }
 
     if (type === "insert") {
-      if (!isNonEmptyString(operation.anchor)) {
-        errors.push(
-          createIssue({
-            code: "OPERATION_TARGET_EMPTY",
-            message: `Operation ${index} (insert) requires a non-empty anchor string.`,
-            operationIndex: index,
-            operationType: type,
-            field: "anchor",
-          }),
-        );
+      const normalized = normalizeInsertOperation(operation, index);
+      if ("code" in normalized) {
+        errors.push(normalized);
         return;
       }
-      if (!isNonEmptyString(operation.text)) {
-        errors.push(
-          createIssue({
-            code: "OPERATION_INVALID",
-            message: `Operation ${index} (insert) requires a non-empty text value.`,
-            operationIndex: index,
-            operationType: type,
-            field: "text",
-          }),
-        );
-        return;
-      }
-      if (operation.position !== undefined && !isInsertPosition(operation.position)) {
-        errors.push(
-          createIssue({
-            code: "OPERATION_INVALID_POSITION",
-            message: `Operation ${index} (insert) position must be "before" or "after".`,
-            operationIndex: index,
-            operationType: type,
-            field: "position",
-          }),
-        );
-        return;
-      }
-      const insertPosition = isInsertPosition(operation.position) ? operation.position : undefined;
-      const insertExpectedMatches = toExpectedMatches(operation.expectedMatches);
-      normalizedOperations.push({
-        type: "insert",
-        anchor: operation.anchor,
-        text: operation.text,
-        ...(insertPosition !== undefined && { position: insertPosition }),
-        ...(insertExpectedMatches !== undefined && { expectedMatches: insertExpectedMatches }),
-      });
+      normalizedOperations.push(normalized);
       return;
     }
 
@@ -776,34 +776,6 @@ const applyInsert = (
   return { content: nextContent, matchCount: matches.length };
 };
 
-const collectSkillValidationIssues = (
-  content: SkillContent,
-  expectedName?: SkillNameExpectation,
-): SkillPatchIssue[] => {
-  const errors = validateSkillContent(content);
-  const issues = errors.map((message) =>
-    createIssue({
-      code: "SKILL_INVALID",
-      message,
-    }),
-  );
-
-  if (issues.length > 0 || !expectedName) {
-    return issues;
-  }
-
-  // validateSkillContent succeeded, so parseFrontmatter is guaranteed to succeed
-  const { metadata } = parseFrontmatter(content);
-  const properties = frontmatterToProperties(metadata);
-  const nameErrors = validateSkillProperties(properties, { expectedName });
-  return nameErrors.map((message) =>
-    createIssue({
-      code: "SKILL_INVALID",
-      message,
-    }),
-  );
-};
-
 const collectOptionalPatchValidationIssues = (
   content: SkillContent,
   validateOption: SkillPatchApplyOptions["validate"],
@@ -812,8 +784,10 @@ const collectOptionalPatchValidationIssues = (
     return [];
   }
 
-  const expectedName = typeof validateOption === "object" ? validateOption.expectedName : undefined;
-  return collectSkillValidationIssues(content, expectedName);
+  const options = typeof validateOption === "object" ? validateOption : {};
+  return validateSkillContent(content, options).map((message) =>
+    createIssue({ code: "SKILL_INVALID", message }),
+  );
 };
 
 const validateGlobalExpectedMatches = (

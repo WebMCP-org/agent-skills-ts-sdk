@@ -10,3 +10,4 @@ playground/worker-configuration.d.ts
 .agents/
 .fallow/
 .vitest-attachments/
+coverage/
