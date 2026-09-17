@@ -1,4 +1,4 @@
-import { Bot, ChevronDown, Code2, Copy, FileText, Github, Loader2, Pencil } from "lucide-react";
+import { Bot, ChevronDown, Code2, Copy, FileText, Loader2, Pencil } from "lucide-react";
 import {
   AbstractAgent,
   CopilotChat,
@@ -195,7 +195,7 @@ function App() {
               rel="noreferrer"
               target="_blank"
             >
-              <Github size={16} />
+              <Code2 size={16} />
               <span className="hidden sm:inline">GitHub</span>
             </a>
             <a

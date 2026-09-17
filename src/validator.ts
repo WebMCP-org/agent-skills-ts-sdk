@@ -6,8 +6,15 @@
  */
 
 import { ParseError, ValidationError } from "./errors.js";
-import type { SkillContent, SkillContentEntry, SkillProperties } from "./models.js";
+import type {
+  SkillBody,
+  SkillFrontmatter,
+  SkillContent,
+  SkillContentEntry,
+  SkillProperties,
+} from "./models.js";
 import { SKILL_FRONTMATTER_KEYS } from "./models.js";
+import type { ParseFrontmatterOptions } from "./parser.js";
 import { findSkillMdFile, frontmatterToProperties, parseFrontmatter } from "./parser.js";
 import { normalizeNFKC } from "./utils/unicode.js";
 
@@ -88,14 +95,21 @@ const ALLOWED_FIELDS_RENDERED_LIST = formatFieldList(ALLOWED_FIELDS);
  * @param metadata - Parsed frontmatter object.
  * @returns Validation errors for unknown keys.
  */
-const validateFrontmatterFields = (metadata: object): string[] => {
+const validateFrontmatterFields = (
+  metadata: object,
+  options: ValidateSkillContentOptions,
+): string[] => {
+  if (options.unknownFields === "allow") return [];
   const errors: string[] = [];
-  const extraFields = Object.keys(metadata).filter((field) => !ALLOWED_FIELDS.has(field));
+  const allowedFields = options.allowedFields
+    ? new Set([...ALLOWED_FIELDS, ...options.allowedFields])
+    : ALLOWED_FIELDS;
+  const extraFields = Object.keys(metadata).filter((field) => !allowedFields.has(field));
 
   if (extraFields.length > 0) {
     errors.push(
       `Unexpected fields in frontmatter: ${extraFields.sort().join(", ")}. ` +
-        `Only ${ALLOWED_FIELDS_RENDERED_LIST} are allowed.`,
+        `Only ${options.allowedFields ? formatFieldList(allowedFields) : ALLOWED_FIELDS_RENDERED_LIST} are allowed.`,
     );
   }
 
@@ -300,6 +314,23 @@ export function validateSkillProperties(
   return errors;
 }
 
+/** A synchronous host rule. Return errors without mutating the parsed input. */
+export type SkillValidator = (
+  metadata: Readonly<SkillFrontmatter & Record<string, unknown>>,
+  body: SkillBody,
+) => readonly string[];
+
+/** Validation rules for content, in addition to the standard Agent Skills fields. */
+export interface ValidateSkillContentOptions
+  extends ValidateSkillPropertiesOptions, ParseFrontmatterOptions {
+  /** Additional top-level fields accepted by this host. Core rules still apply. */
+  allowedFields?: readonly string[];
+  /** Reject undeclared fields by default, or allow all host extension fields. */
+  unknownFields?: "reject" | "allow";
+  /** Additional rules run in order after parsing. Exceptions become validation errors. */
+  validators?: readonly SkillValidator[];
+}
+
 /**
  * Validate complete SKILL.md content.
  *
@@ -320,12 +351,22 @@ export function validateSkillProperties(
  *
  * Spec: https://agentskills.io/specification
  */
-export function validateSkillContent(content: SkillContent): string[] {
+export function validateSkillContent(
+  content: SkillContent,
+  options: ValidateSkillContentOptions = {},
+): string[] {
   try {
-    const { metadata } = parseFrontmatter(content);
-    const errors = validateFrontmatterFields(metadata);
+    const { metadata, body } = parseFrontmatter(content, options);
+    const errors = validateFrontmatterFields(metadata, options);
     const properties = frontmatterToProperties(metadata);
-    errors.push(...validateSkillProperties(properties));
+    errors.push(...validateSkillProperties(properties, options));
+    for (const validator of options.validators ?? []) {
+      try {
+        errors.push(...validator(metadata, body));
+      } catch (error) {
+        errors.push(`Validator failed: ${formatUnexpectedError(error)}`);
+      }
+    }
     return errors;
   } catch (error) {
     if (error instanceof ParseError || error instanceof ValidationError) {
@@ -350,11 +391,9 @@ export function validateSkillContent(content: SkillContent): string[] {
  * @see https://agentskills.io/specification
  * @see https://github.com/agentskills/agentskills/blob/main/skills-ref/src/skills_ref/validator.py
  */
-export interface SkillValidationOptions {
+export interface SkillValidationOptions extends ValidateSkillContentOptions {
   /** Optional location label included in error messages. */
   location?: string;
-  /** Expected skill name (for example, directory or slug match). */
-  expectedName?: ValidateSkillPropertiesOptions["expectedName"];
   /** Whether the host path exists. */
   exists?: boolean;
   /** Whether the host path is a directory. */
@@ -401,20 +440,5 @@ export function validateSkillEntries(
     return ["Missing required file: SKILL.md"];
   }
 
-  try {
-    const { metadata } = parseFrontmatter(skillFile.content);
-    const errors = validateFrontmatterFields(metadata);
-    const properties = frontmatterToProperties(metadata);
-    errors.push(
-      ...validateSkillProperties(properties, {
-        ...(options.expectedName !== undefined && { expectedName: options.expectedName }),
-      }),
-    );
-    return errors;
-  } catch (error) {
-    if (error instanceof ParseError || error instanceof ValidationError) {
-      return [error.message];
-    }
-    return [`Unexpected error: ${formatUnexpectedError(error)}`];
-  }
+  return validateSkillContent(skillFile.content, options);
 }

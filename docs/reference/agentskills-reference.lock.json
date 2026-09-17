@@ -3,7 +3,7 @@
   "source": "github:agentskills/agentskills",
   "remote": "https://github.com/agentskills/agentskills",
   "branch": "main",
-  "commit": "5d4c1fda3f786fff826c7f56b6cb3341e7f3a911",
+  "commit": "69ef37e9424c0a7ea9dd2293b559e43ec8176379",
   "trackedPaths": [
     "docs/specification.mdx",
     "skills-ref/pyproject.toml",
@@ -11,5 +11,5 @@
     "skills-ref/tests",
     "skills-ref/uv.lock"
   ],
-  "trackedContentSha256": "f308b15ce0bdac3a5aabeb3ce7058234ff1f8b2b31f2f11b65f2eeb6dd62951d"
+  "trackedContentSha256": "f445e32ca1d6b5fae78c5e72899463451a4eaa88525660c2b3b4b226f2450b0c"
 }

@@ -91,3 +91,117 @@ const makeSource = (id: string, fingerprint: string, skill: ResolvedSkill): Skil
     return name === skill.name ? skill : null;
   },
 });
+
+it("keeps healthy sources usable when other sources fail to list or refresh", async () => {
+  const healthy = makeSource("healthy", "v1", {
+    name: "demo",
+    description: "Demo",
+    body: "Instructions",
+    resources: [],
+  });
+  const failing: SkillSource = {
+    id: "failing",
+    fingerprint: "v1",
+    async list() {
+      throw new Error("offline");
+    },
+    async load() {
+      return null;
+    },
+    async refresh() {
+      throw "refresh offline";
+    },
+  };
+  const registry = await createSkillRegistry([failing, healthy]);
+  expect(registry.warnings).toEqual([
+    'Skill source "failing" failed to list skills and was skipped: offline',
+  ]);
+  await registry.refresh();
+  expect(registry.warnings).toEqual([
+    'Skill source "failing" failed to list skills and was skipped: offline',
+    'Skill source "failing" failed to refresh: refresh offline',
+  ]);
+  expect(registry.list().map(({ name }) => name)).toEqual(["demo"]);
+  expect(await registry.read({ name: "demo" })).toEqual({ ok: true, content: "Instructions" });
+  expect(await registry.loadSkill("absent")).toBeNull();
+  expect(await registry.read({ name: "absent" })).toMatchObject({
+    ok: false,
+    code: "SKILL_NOT_FOUND",
+  });
+  // @ts-expect-error Exercise untyped tool input at the public boundary.
+  expect(await registry.read({ name: 42 })).toMatchObject({ ok: false, code: "INVALID_ARGUMENT" });
+});
+
+it("handles an empty catalog and non-Error source failures", async () => {
+  const registry = await createSkillRegistry([
+    {
+      id: "broken",
+      fingerprint: "v1",
+      async list() {
+        throw "offline";
+      },
+      async load() {
+        return null;
+      },
+      async refresh() {
+        throw new Error("refresh offline");
+      },
+    },
+  ]);
+  expect(registry.list()).toEqual([]);
+  expect(registry.systemPrompt()).toBeNull();
+  expect(registry.snapshot()).toEqual({ fingerprint: "broken:v1", catalogPrompt: null });
+  await registry.refresh();
+  expect(registry.warnings).toEqual([
+    'Skill source "broken" failed to list skills and was skipped: offline',
+    'Skill source "broken" failed to refresh: refresh offline',
+  ]);
+});
+
+it("returns isolated catalog data for custom renderers", async () => {
+  const descriptor = {
+    name: "demo",
+    description: "Demo",
+    metadata: { version: "1" },
+    resources: ["guide"],
+  };
+  const registry = await createSkillRegistry([
+    {
+      id: "custom",
+      fingerprint: "v1",
+      async list() {
+        return [descriptor];
+      },
+      async load() {
+        return null;
+      },
+    },
+  ]);
+  const listed = registry.list()[0]!;
+  listed.name = "changed";
+  listed.metadata!.version = "2";
+  listed.resources!.push("changed");
+  expect(registry.list()).toEqual([{ ...descriptor, sourceId: "custom" }]);
+});
+
+it("handles absent files and resources without loading unrelated skills", async () => {
+  const { skillSourceFromEntries } = await import("../src/index");
+  await expect(skillSourceFromEntries([]).list()).rejects.toThrow("SKILL.md not found");
+  await expect(skillSourceFromEntries([], { location: "custom" }).load("demo")).rejects.toThrow(
+    "SKILL.md not found in custom",
+  );
+  const source = skillSourceFromEntries(
+    [
+      {
+        name: "SKILL.md",
+        content: "---\nname: demo\ndescription: Demo\n---\n[missing](custom/absent.md)",
+      },
+    ],
+    { fingerprint: "v1" },
+  );
+  expect(source.fingerprint).toBe("v1");
+  expect(await source.load("other")).toBeNull();
+  expect(await source.load("demo")).toMatchObject({ resources: [] });
+  expect(await source.readResource?.("other", "custom/absent.md")).toBeNull();
+  expect(await source.readResource?.("demo", "custom/absent.md")).toBeNull();
+});

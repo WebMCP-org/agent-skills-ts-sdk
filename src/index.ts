@@ -41,8 +41,10 @@ export { SKILL_FRONTMATTER_KEYS, skillPropertiesToDict } from "./models.js";
 export type {
   ParseFrontmatterInputMode,
   ParseFrontmatterOptions,
+  ParseSkillDocumentOptions,
   ReadSkillPropertiesOptions,
   ResourceLink,
+  SkillDocument,
 } from "./parser.js";
 export {
   extractBody,
@@ -51,6 +53,7 @@ export {
   frontmatterToProperties,
   parseFrontmatter,
   parseSkillContent,
+  parseSkillDocument,
   readSkillProperties,
 } from "./parser.js";
 export type {
@@ -94,7 +97,12 @@ export type {
 export { toDisclosureInstructions, toDisclosurePrompt, toPrompt } from "./prompt.js";
 export { estimateTokens } from "./utils/token-estimator.js";
 export { normalizeNFKC } from "./utils/unicode.js";
-export type { SkillValidationOptions, ValidateSkillPropertiesOptions } from "./validator.js";
+export type {
+  SkillValidator,
+  SkillValidationOptions,
+  ValidateSkillContentOptions,
+  ValidateSkillPropertiesOptions,
+} from "./validator.js";
 export {
   ALLOWED_FIELDS,
   MAX_COMPATIBILITY_LENGTH,
