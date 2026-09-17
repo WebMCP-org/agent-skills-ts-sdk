@@ -1,5 +1,17 @@
 # agent-skills-ts-sdk
 
+## 2.5.0
+
+### Minor Changes
+
+- bb0b520: Add syntax-only document parsing with inferred host schema output, extension field policies, and composable validators shared by content, file-entry, and patch validation. Expose registry catalog data for custom presentation while keeping existing prompt helpers and strict validation defaults.
+
+  Align resource links and the reference lock with the current AgentSkills specification, preserve prototype-like metadata keys and literal delimiter text in scalar values, and avoid duplicate parsing during patch name validation. Enforce coverage in CI and add reproducible benchmarks.
+
+### Patch Changes
+
+- bb0b520: Update YAML and the build and test toolchain while preserving the parser and published package contracts.
+
 ## 2.4.2
 
 ### Patch Changes
